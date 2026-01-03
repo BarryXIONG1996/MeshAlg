@@ -1,5 +1,16 @@
 #include "MeshIntersector.h"
 #include <memory>
+#include <cmath>
+
+// 定义 M_PI 和 M_E，防止未声明错误
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
+#ifndef M_E
+#define M_E 2.71828182845904523536
+#endif
+
 #include "RTree.h"
 
 class SpatialAccelerator {

@@ -25,12 +25,14 @@ struct BndBox3d
     void Add(const Vec3d& p);
 };
 
+struct Edge;
 struct Vertex {
     Vec3d pnt;
     Edge* e;        // »Œ“ª±ﬂ
     int posTag;     // 0=default, 1=in, 2=out, 3=on
 };
 
+struct Face;
 struct Edge {
     Vertex* v1, * v2;
     Face* lF, * rF;  // ◊Û”“√Ê

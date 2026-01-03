@@ -127,7 +127,18 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="BooleanOperation.cpp" />
+    <ClCompile Include="BooleanOpHelper.cpp" />
     <ClCompile Include="MeshBooleanOperation.cpp" />
+    <ClCompile Include="MeshIntersector.cpp" />
+    <ClCompile Include="TopoTriMesh.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="BooleanOperation.h" />
+    <ClInclude Include="BooleanOpHelper.h" />
+    <ClInclude Include="MeshIntersector.h" />
+    <ClInclude Include="RTree.h" />
+    <ClInclude Include="TopoTriMesh.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

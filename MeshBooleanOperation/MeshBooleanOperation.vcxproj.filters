@@ -18,5 +18,34 @@
     <ClCompile Include="MeshBooleanOperation.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="BooleanOperation.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="TopoTriMesh.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="MeshIntersector.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="BooleanOpHelper.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="BooleanOperation.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="TopoTriMesh.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="MeshIntersector.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="RTree.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="BooleanOpHelper.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

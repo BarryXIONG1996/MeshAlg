@@ -49,7 +49,7 @@ bool BooleanOpHelper::Execute(TopoTriMesh& res) {
     return true;
 }
 
-// BFS 区域提取（核心修正点集中于此）
+// BFS 区域提取
 void BooleanOpHelper::BFSExtractRegion(const TopoTriMesh& mesh, TopoTriMesh& Mout, TopoTriMesh& Min) {
     std::queue<Edge*> es;
     std::set<Edge*> visitedE;
@@ -124,8 +124,7 @@ void BooleanOpHelper::AddFace(Face* f, TopoTriMesh& M, std::set<Vertex*>& vv, st
 
 // AddEdge：保持原样
 void BooleanOpHelper::AddEdge(Edge* e, TopoTriMesh& Mout, std::set<Vertex*>& vvOut, std::set<Edge*>& veOut) {
-    if (!e) return;
-    if (veOut.find(e) != veOut.end()) return;
+    if (!e || veOut.find(e) != veOut.end()) return;
 
     Mout.es.push_back(e);
     veOut.insert(e);

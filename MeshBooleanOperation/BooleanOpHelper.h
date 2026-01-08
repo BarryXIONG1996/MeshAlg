@@ -3,6 +3,7 @@
 #include <set>
 #include <queue>
 
+// 布尔运算后，未使用的拓扑会被释放
 class BooleanOpHelper
 {
  public:

@@ -50,7 +50,7 @@ MeshIntersector::MeshIntersector(TopoTriMesh& m1, TopoTriMesh& m2)
 
 }
 
-bool MeshIntersector::Execute()
+bool MeshIntersector::Execute(TopoTriMesh& coPlanes)
 {
     // 1、构建空间搜索树
     // 计算工具集和目标集的包围盒

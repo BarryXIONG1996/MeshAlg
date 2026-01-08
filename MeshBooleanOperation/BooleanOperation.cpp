@@ -16,11 +16,12 @@ BooleanOperation::BooleanOperation(
     
     // 1. 求交
     MeshIntersector intersector(m_obj, m_sub);
-    if (!intersector.Execute())
+    TopoTriMesh coPlanes;
+    if (!intersector.Execute(coPlanes))
         return false;
 
     // 2.布尔运算
-    BooleanOpHelper boolHelper(m_obj, m_sub, m_opType);
+    BooleanOpHelper boolHelper(m_obj, m_sub, coPlanes, m_opType);
     if (!boolHelper.Execute(res))
         return false;
 

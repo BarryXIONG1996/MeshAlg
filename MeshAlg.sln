@@ -5,6 +5,8 @@ VisualStudioVersion = 17.8.34316.72
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "MeshBooleanOperation", "MeshBooleanOperation\MeshBooleanOperation.vcxproj", "{CFD6A9DD-CDDE-4714-811D-5A20C96BDECE}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "MeshModel", "MeshModel\MeshModel.vcxproj", "{95092D18-EF07-40C5-88AA-EB15CF944A8F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -21,6 +23,14 @@ Global
 		{CFD6A9DD-CDDE-4714-811D-5A20C96BDECE}.Release|x64.Build.0 = Release|x64
 		{CFD6A9DD-CDDE-4714-811D-5A20C96BDECE}.Release|x86.ActiveCfg = Release|Win32
 		{CFD6A9DD-CDDE-4714-811D-5A20C96BDECE}.Release|x86.Build.0 = Release|Win32
+		{95092D18-EF07-40C5-88AA-EB15CF944A8F}.Debug|x64.ActiveCfg = Debug|x64
+		{95092D18-EF07-40C5-88AA-EB15CF944A8F}.Debug|x64.Build.0 = Debug|x64
+		{95092D18-EF07-40C5-88AA-EB15CF944A8F}.Debug|x86.ActiveCfg = Debug|Win32
+		{95092D18-EF07-40C5-88AA-EB15CF944A8F}.Debug|x86.Build.0 = Debug|Win32
+		{95092D18-EF07-40C5-88AA-EB15CF944A8F}.Release|x64.ActiveCfg = Release|x64
+		{95092D18-EF07-40C5-88AA-EB15CF944A8F}.Release|x64.Build.0 = Release|x64
+		{95092D18-EF07-40C5-88AA-EB15CF944A8F}.Release|x86.ActiveCfg = Release|Win32
+		{95092D18-EF07-40C5-88AA-EB15CF944A8F}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

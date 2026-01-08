@@ -8,6 +8,7 @@ struct Vertex {
     Vec3d pnt;
     Edge* e;        // 任一边
     int posTag;     // 0=default, 1=in, 2=out, 3=on
+    std::vector<Edge*> GetAdjacentEdges();
 };
 
 struct Face;
@@ -30,5 +31,7 @@ struct TopoTriMesh{
     std::map<Vec3d, Vertex*, Vec3dCmp> p2V; // 几何去重（带epsilon）
 
     BndBox3d GetBndBox();
+    void AddFace2TopoTriMesh(std::vector<Vec3d>const& pnts);
+    void ReleaseMem();
 };
 

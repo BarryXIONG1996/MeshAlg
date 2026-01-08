@@ -11,12 +11,13 @@ class BooleanOpHelper
     bool Execute(TopoTriMesh& res);
 
 private:
-    void BFSExtractRegion(const TopoTriMesh& mesh, TopoTriMesh& Mout, TopoTriMesh& Min);
+    void BFSExtractRegion(const TopoTriMesh& mesh, TopoTriMesh& Mout, TopoTriMesh& Min); // 共享交点/交线拓扑
     void AddFace(Face* f, TopoTriMesh& M, std::set<Vertex*>& vv, std::set<Edge*>& ve, std::set<Face*>& vf);
     void AddEdge(Edge* e, TopoTriMesh& M, std::set<Vertex*>& vv, std::set<Edge*>& ve);
     void AddAdjacentEdges(Face* f, Edge* skipEdge, std::queue<Edge*>& es, std::set<Edge*>& visitedE);
 
-    TopoTriMesh CombineMeshes(const TopoTriMesh& mesh1, const TopoTriMesh& mesh2, const TopoTriMesh& mesh3);
+    void CombineTopoTriMesh(TopoTriMesh& M, std::vector<TopoTriMesh>& Ms);
+    void ReleaseMeshExceptBoundary(TopoTriMesh& M);
 
 private:
     TopoTriMesh& m_objMesh;

@@ -8,7 +8,7 @@ BooleanOpHelper::BooleanOpHelper(TopoTriMesh& objMesh, TopoTriMesh& subMesh, Top
 
 // 主执行函数
 bool BooleanOpHelper::Execute(TopoTriMesh& res) {
-    // Step 1: 提取区域（变量名按意见(4)修正）
+    // Step 1: 提取区域
     TopoTriMesh Mooutt, Moint;
     BFSExtractRegion(m_objMesh, Mooutt, Moint);
 
@@ -19,15 +19,29 @@ bool BooleanOpHelper::Execute(TopoTriMesh& res) {
     TopoTriMesh Mtono = m_coPlanes;
 
     // Step 3: 按操作类型组合
+    std::vector<TopoTriMesh> ms;
     switch (m_opType) {
     case 0: // INTERSECTION
-        res = CombineMeshes(Moint, Mtino, Mtono);
+        res = Moint;
+        ms = { Mtino, Mtono };
+        ReleaseMeshExceptBoundary(Mooutt);
+        ReleaseMeshExceptBoundary(Mtouto);
+        CombineTopoTriMesh(res, ms);
         break;
     case 1: // UNION
-        res = CombineMeshes(Mooutt, Mtouto, Mtono);
+        res = Mooutt;
+        ms = { Mtouto, Mtono };
+        ReleaseMeshExceptBoundary(Moint);
+        ReleaseMeshExceptBoundary(Mtino);
+        CombineTopoTriMesh(res, ms);
         break;
     case 2: // DIFFERENCE (obj - sub)
-        res = CombineMeshes(Mooutt, Mtino, TopoTriMesh{});
+        res = Mooutt;
+        ms = { Mtino };
+        ReleaseMeshExceptBoundary(Moint);
+        ReleaseMeshExceptBoundary(Mtouto);
+        Mtono.ReleaseMem();
+        CombineTopoTriMesh(res, ms);
         break;
     default:
         return false;
@@ -38,12 +52,12 @@ bool BooleanOpHelper::Execute(TopoTriMesh& res) {
 // BFS 区域提取（核心修正点集中于此）
 void BooleanOpHelper::BFSExtractRegion(const TopoTriMesh& mesh, TopoTriMesh& Mout, TopoTriMesh& Min) {
     std::queue<Edge*> es;
-    std::set<Edge*> visitedE; // ← 修改(1): 改为 set
+    std::set<Edge*> visitedE;
     std::set<Vertex*> vvOut;
     std::set<Edge*> veOut;
     std::set<Face*> vfOut;
 
-    // 初始化：从 posTag == 2 (Out) 的顶点出发 ← 修改(3)
+    // 初始化：从 posTag == 2 (Out) 的顶点出发
     for (auto* v : mesh.vs) {
         if (v && v->posTag == 2) {
             Edge* e = v->e;
@@ -73,7 +87,6 @@ void BooleanOpHelper::BFSExtractRegion(const TopoTriMesh& mesh, TopoTriMesh& Mou
         }
     }
 
-    // ← 修改(2): 移除 Min.es 的 std::find 重复检查，直接 push
     for (auto* e : mesh.es) {
         if (veOut.find(e) == veOut.end() ||
             (e->v1 && e->v2 && e->v1->posTag == 3 && e->v2->posTag == 3)) {
@@ -157,11 +170,114 @@ void BooleanOpHelper::AddAdjacentEdges(Face* f, Edge* skipEdge, std::queue<Edge*
     }
 }
 
-// CombineMeshes：实现实际的合并逻辑
-TopoTriMesh BooleanOpHelper::CombineMeshes(const TopoTriMesh& mesh1, const TopoTriMesh& mesh2, const TopoTriMesh& mesh3) {
-    TopoTriMesh result;
+void BooleanOpHelper::CombineTopoTriMesh(TopoTriMesh& M, std::vector<TopoTriMesh>& Ms)
+{
+    for (auto& m : Ms)
+    {
+        for (auto& f : m.fs) // 遍历M.fs(f) :
+        {
+            if (!f) continue;
+            Edge* es[3];
+            Edge* fe = f->e;
+            es[1] = fe;
+            if (!fe) continue;
+            if (fe->lF == f)
+            {
+                if (fe->lPE)
+                    es[0] = fe->lPE;
+                if (fe->lSE)
+                    es[2] = fe->lSE;
+            }
+            else
+            {
+                if (fe->rPE)
+                    es[0] = fe->rPE;
+                if (fe->rSE)
+                    es[2] = fe->rSE;
+            }
+            std::vector<Vec3d> pnts;
+            for (auto& e : es)
+            {
+                if (!e) continue;
+                if (e->lF == f)
+                    pnts.push_back(e->v1->pnt);
+                else
+                    pnts.push_back(e->v2->pnt);
+            }
+            if (pnts.size() < 3) continue;
+            // 将pnts添加到M
+            M.AddFace2TopoTriMesh(pnts);
+        }
+        // 内存释放
+        std::for_each(m.fs.begin(), m.fs.end(), [](Face* f) { delete f; f = nullptr; });
+        std::for_each(m.es.begin(), m.es.end(), [](Edge* e) { delete e; e = nullptr; });
+        std::for_each(m.vs.begin(), m.vs.end(), [](Vertex* v) { delete v; v = nullptr; });
+    }
+}
 
-    // ToDo: 实现实际的合并逻辑
+void BooleanOpHelper::ReleaseMeshExceptBoundary(TopoTriMesh& M)
+{
+    // 遍历M
+    std::set<Face*> fs;
+    std::set<Edge*> es, esOn;
+    for (auto& f : M.fs)
+    {
+        if (!f) continue;
+        fs.insert(f);
+    }
 
-    return result;
+    for (auto& e : M.es)
+    {
+        if (!e) continue;
+        if (e->v1 && e->v2 && e->v1->posTag == 3 && e->v2->posTag == 3)
+            esOn.insert(e);
+        else
+            es.insert(e);
+    }
+
+    // 解除顶点联系
+    for (auto& v : M.vs)
+    {
+        if (!v || v->posTag != 3 || !es.count(v->e)) continue;
+        // 获取与v相连的所有边
+        std::vector<Edge*> cEdges = v->GetAdjacentEdges();
+        for (auto& ce : cEdges)
+        {
+            if (ce->v2 == v && !es.count(ce))
+            {
+                v->e = ce;
+                break;
+            }
+        }
+    }
+
+    // 解除交线联系
+    for (auto& e : esOn)
+    {
+        if (fs.count(e->lF))
+        {
+            e->lF = nullptr;
+            e->lSE = e->lPE = nullptr;
+        }
+        else
+        {
+            e->rF = nullptr;
+            e->rSE = e->rPE = nullptr;
+        }
+    }
+
+    // 内存释放
+    std::for_each(M.fs.begin(), M.fs.end(), [](Face* f) { delete f; f = nullptr; });
+    std::for_each(M.es.begin(), M.es.end(), [](Edge* e) {
+        if (e->v1 && e->v2 && e->v1->posTag == 3 && e->v2->posTag == 3)
+            return;
+        delete e;
+        e = nullptr;
+        });
+    std::for_each(M.vs.begin(), M.vs.end(), [](Vertex* v) {
+        if (v->posTag == 3)
+            return;
+        delete v;
+        v = nullptr;
+        });
 }

@@ -134,7 +134,67 @@ void MeshIntersector::FaceFaceInt(Face* f1, Face* f2)
 
 void MeshIntersector::CoPlanarFaceInt(Face* f1, Face* f2)
 {
-    
+    // 获取三角形顶点
+    std::vector<Vec3d> tri1 = f1->getPnts();
+    std::vector<Vec3d> tri2 = f2->getPnts();
+
+    // 三角形之间进行分割
+    std::vector<std::vector<Vec3d>> tri1Out2, tri2Out1; // 三角形排除交集之外的部分
+    std::vector<Vec3d> tri12Int; // 三角形的交集
+    GeomCalc::TriRegionSplit(tri1, tri2, tri1Out2, tri2Out1, tri12Int);
+
+    // 如果两个三角形没有交集或只交一条边
+    if (tri12Int.size() < 3)
+        return;
+
+    // 获取边列表
+    std::vector<Edge*> edges1 = f1->getEdges();
+    std::vector<Edge*> edges2 = f2->getEdges();
+
+    std::map<Edge*, std::vector<Vec3d>> e2Pts1, e2Pts2;
+
+    for (const Vec3d& pt : tri12Int) {
+        // 找 pt 在 f1 的哪条边上
+        for (Edge* e : edges1) {
+            double paramPt = 0.0;
+            if (GeomCalc::IsPointOnSegment(pt, e->v1->pnt, e->v2->pnt, paramPt) 
+                && paramPt > g_epsilon && paramPt < 1-g_epsilon /*pt不是端点*/) {
+                e2Pts1[e].push_back(pt);
+                break;
+            }
+        }
+        // 找 pt 在 f2 的哪条边上
+        for (Edge* e : edges2) {
+            double paramPt = 0.0;
+            if (GeomCalc::IsPointOnSegment(pt, e->v1->pnt, e->v2->pnt, paramPt)
+                && paramPt > g_epsilon && paramPt < 1 - g_epsilon /*pt不是端点*/) {
+                e2Pts2[e].push_back(pt);
+                break;
+            }
+        }
+    }
+
+    m_mesh1.RemoveFace(f1);
+    for (auto& e : e2Pts1)
+    {
+        if (e.first->lF == f1)
+            m_mesh1.RemoveFace(e.first->rF);
+        else if (e.first->rF == f1)
+            m_mesh1.RemoveFace(e.first->lF);
+        m_mesh1.RemoveEdge(e.first);
+    }
+
+    m_mesh2.RemoveFace(f2);
+    for (auto& e : e2Pts2)
+    {
+        if (e.first->lF == f2)
+            m_mesh2.RemoveFace(e.first->rF);
+        else if (e.first->rF == f2)
+            m_mesh2.RemoveFace(e.first->lF);
+        m_mesh2.RemoveEdge(e.first);
+    }
+
+
 }
 
 void MeshIntersector::NonCoPlanarFaceInt(Face* f1, Face* f2)

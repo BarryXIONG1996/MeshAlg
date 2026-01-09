@@ -91,6 +91,64 @@ void TopoTriMesh::AddFace2TopoTriMesh(std::vector<Vec3d> const& pnts)
     }
 }
 
+void TopoTriMesh::RemoveFace(Face* f)
+{
+    auto RmEdgeFaceRel = [&](Edge* e) {
+        if (!e) return;
+        if (e->lF == f)
+            e->lF = nullptr;
+        else if (e->rF == f)
+            e->rF = nullptr;
+    };
+
+    if (!f) return;
+    Edge* fe = f->e, *pe = nullptr, *se = nullptr;
+    if (!fe) return;
+    if (fe->lF == f)
+    {
+        fe->lF = nullptr;
+        pe = fe->lPE, se = fe->lSE;
+    }
+    else if (fe->rF == f)
+    {
+        fe->rF = nullptr;
+        pe = fe->rPE, se = fe->rSE;
+    }
+    RmEdgeFaceRel(pe);
+    RmEdgeFaceRel(se);
+
+    auto newEnd = std::remove_if(fs.begin(), fs.end(), [&](Face* rmF) { return rmF == f; });
+    fs.erase(newEnd, fs.end());
+}
+
+void TopoTriMesh::RemoveEdge(Edge* e)
+{
+    if (!e) return;
+
+    auto cleanVertex = [&](Vertex* v) {
+        if (!v) return;
+        std::vector<Edge*> adjEs = v->GetAdjacentEdges();
+        // 如果该顶点只连着这条边（即移除后孤立），则删除顶点
+        if (adjEs.size() == 1 && adjEs[0] == e) {
+            vs.erase(std::remove(vs.begin(), vs.end(), v), vs.end());
+        }
+        // 清理其他相邻边中指向 e 的拓扑指针
+        for (Edge* adj : adjEs) {
+            if (adj == e) continue; // 跳过自身
+            if (adj->lPE == e) adj->lPE = nullptr;
+            if (adj->lSE == e) adj->lSE = nullptr;
+            if (adj->rPE == e) adj->rPE = nullptr;
+            if (adj->rSE == e) adj->rSE = nullptr;
+        }
+        };
+
+    cleanVertex(e->v1);
+    cleanVertex(e->v2);
+
+    // 从边列表中移除 e
+    es.erase(std::remove(es.begin(), es.end(), e), es.end());
+}
+
 void TopoTriMesh::ReleaseMem()
 {
     for (auto& f : fs)

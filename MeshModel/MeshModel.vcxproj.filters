@@ -48,6 +48,9 @@
     <ClInclude Include="Geometry.h">
       <Filter>header</Filter>
     </ClInclude>
+    <ClInclude Include="GeomCalc.h">
+      <Filter>header</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.cpp">
@@ -69,6 +72,9 @@
       <Filter>poly2tri</Filter>
     </ClCompile>
     <ClCompile Include="Geometry.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="GeomCalc.cpp">
       <Filter>src</Filter>
     </ClCompile>
   </ItemGroup>

@@ -9,15 +9,19 @@
 #include <vector>
 #include <map>
 
+extern const double g_epsilon;
+
 struct MESHMODELDLL Vec3d
 {
     double x, y, z;
-    Vec3d operator-(const Vec3d& v);
-    Vec3d operator+(const Vec3d& v);
+    Vec3d operator-(const Vec3d& v) const;
+    Vec3d operator+(const Vec3d& v) const;
     Vec3d operator*(double s) const;
     double Dot(const Vec3d& v) const;
     Vec3d Cross(const Vec3d& v) const;
     double Length() const;
+    Vec3d Normalization() const;
+    bool Parallel(const Vec3d& v) const;
 };
 
 struct MESHMODELDLL Vec3dCmp {

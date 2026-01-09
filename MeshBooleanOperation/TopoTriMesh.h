@@ -17,11 +17,16 @@ struct Edge {
     Face* lF, * rF;  // 左右面
     Edge* lPE, * lSE, * rPE, * rSE; // 翼边结构
     bool isInner;
+
+    std::vector<Vec3d> getPnts(bool left = true);
 };
 
 struct Face {
     Edge* e;        // 任一边
     BndBox3d bbox;
+
+    std::vector<Edge*> getEdges();
+    std::vector<Vec3d> getPnts();
 };
 
 struct TopoTriMesh{

@@ -140,6 +140,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="framework.h" />
+    <ClInclude Include="GeomCalc.h" />
     <ClInclude Include="Geometry.h" />
     <ClInclude Include="poly2tri\common\dll_symbol.h" />
     <ClInclude Include="poly2tri\common\shapes.h" />
@@ -152,6 +153,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.cpp" />
+    <ClCompile Include="GeomCalc.cpp" />
     <ClCompile Include="Geometry.cpp" />
     <ClCompile Include="poly2tri\common\shapes.cc" />
     <ClCompile Include="poly2tri\sweep\advancing_front.cc" />

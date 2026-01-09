@@ -1,12 +1,12 @@
 #include "Geometry.h"
 
-const double g_epsilon = 1e-6;
+const double g_epsilon = 1e-9;
 
-Vec3d Vec3d::operator-(const Vec3d& v) {
+Vec3d Vec3d::operator-(const Vec3d& v) const {
     return Vec3d{ x - v.x, y - v.y, z - v.z };
 }
 
-Vec3d Vec3d::operator+(const Vec3d& v) {
+Vec3d Vec3d::operator+(const Vec3d& v) const {
     return Vec3d{ x + v.x, y + v.y, z + v.z };
 }
 
@@ -28,6 +28,22 @@ Vec3d Vec3d::Cross(const Vec3d& v) const {
 
 double Vec3d::Length() const {
     return sqrt(x * x + y * y + z * z);
+}
+
+Vec3d Vec3d::Normalization() const
+{
+    double len = Length();
+
+    if (len < g_epsilon)
+        return { 0,0,0 };
+
+    return { x/len, y/len, z/len };
+}
+
+bool Vec3d::Parallel(const Vec3d& v) const
+{
+    Vec3d crossVec = Cross(v);
+    return crossVec.Length() < g_epsilon;
 }
 
 bool Vec3dCmp::operator()(const Vec3d& a, const Vec3d& b) const {

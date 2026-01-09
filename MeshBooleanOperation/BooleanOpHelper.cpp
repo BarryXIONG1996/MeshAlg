@@ -2,6 +2,8 @@
 #include <queue>
 #include <set>
 
+extern const double g_epsilon;
+
 // 构造函数
 BooleanOpHelper::BooleanOpHelper(TopoTriMesh& objMesh, TopoTriMesh& subMesh, TopoTriMesh& coPlanes, int opType)
     : m_objMesh(objMesh), m_subMesh(subMesh), m_coPlanes(coPlanes), m_opType(opType) {}
@@ -175,34 +177,7 @@ void BooleanOpHelper::CombineTopoTriMesh(TopoTriMesh& M, std::vector<TopoTriMesh
     {
         for (auto& f : m.fs) // 遍历M.fs(f) :
         {
-            if (!f) continue;
-            Edge* es[3];
-            Edge* fe = f->e;
-            es[1] = fe;
-            if (!fe) continue;
-            if (fe->lF == f)
-            {
-                if (fe->lPE)
-                    es[0] = fe->lPE;
-                if (fe->lSE)
-                    es[2] = fe->lSE;
-            }
-            else
-            {
-                if (fe->rPE)
-                    es[0] = fe->rPE;
-                if (fe->rSE)
-                    es[2] = fe->rSE;
-            }
-            std::vector<Vec3d> pnts;
-            for (auto& e : es)
-            {
-                if (!e) continue;
-                if (e->lF == f)
-                    pnts.push_back(e->v1->pnt);
-                else
-                    pnts.push_back(e->v2->pnt);
-            }
+            std::vector<Vec3d> pnts = f->getPnts();
             if (pnts.size() < 3) continue;
             // 将pnts添加到M
             M.AddFace2TopoTriMesh(pnts);

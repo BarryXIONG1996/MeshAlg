@@ -142,3 +142,49 @@ std::vector<Edge*> Vertex::GetAdjacentEdges()
 
     return cEdges;
 }
+
+std::vector<Edge*> Face::getEdges()
+{
+    std::vector<Edge*> es(3);
+    Edge* fe = e;
+    es[1] = fe;
+    if (!fe) return {};
+    if (fe->lF == this)
+    {
+        if (fe->lPE)
+            es[0] = fe->lPE;
+        if (fe->lSE)
+            es[2] = fe->lSE;
+    }
+    else
+    {
+        if (fe->rPE)
+            es[0] = fe->rPE;
+        if (fe->rSE)
+            es[2] = fe->rSE;
+    }
+    return es;
+}
+
+std::vector<Vec3d> Face::getPnts()
+{
+    std::vector<Edge*> es = getEdges();
+    std::vector<Vec3d> pnts;
+    for (auto& e : es)
+    {
+        if (!e) continue;
+        if (e->lF == this)
+            pnts.push_back(e->v1->pnt);
+        else
+            pnts.push_back(e->v2->pnt);
+    }
+    return pnts;
+}
+
+std::vector<Vec3d> Edge::getPnts(bool left)
+{
+    if (!v1 || !v2) return {};
+    if (left)
+        return std::vector<Vec3d>{ v1->pnt, v2->pnt };
+    return std::vector<Vec3d>{ v2->pnt, v1->pnt };
+}

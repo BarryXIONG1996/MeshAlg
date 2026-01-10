@@ -24,4 +24,3 @@ struct MESHMODELDLL GeomCalc
     // 多边形的三角化
     static std::vector<std::vector<Vec3d>> Triangulate(std::vector<Vec3d> const& poly);
 };
-

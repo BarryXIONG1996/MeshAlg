@@ -5,9 +5,6 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
-    <Filter Include="poly2tri">
-      <UniqueIdentifier>{4ba71b46-81f0-40f3-b788-3440f6035365}</UniqueIdentifier>
-    </Filter>
     <Filter Include="header">
       <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
       <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
@@ -16,34 +13,31 @@
       <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
       <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
     </Filter>
+    <Filter Include="Clipper2Lib">
+      <UniqueIdentifier>{505ee315-3af8-45bf-bcd9-4ac76471ebf4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Clipper2Lib\include">
+      <UniqueIdentifier>{4ae467c1-d685-4946-a70d-1824cd65e9e0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Clipper2Lib\src">
+      <UniqueIdentifier>{41a05984-c206-474d-86e3-07d3f2dd8ef2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Clipper2Lib\include\clipper2">
+      <UniqueIdentifier>{298d27f9-62e2-47e2-8022-0e766ef110a7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CDT">
+      <UniqueIdentifier>{63645b92-2a8f-4c06-96a6-3cf0f2e429e0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CDT\include">
+      <UniqueIdentifier>{28211470-a8ea-4ab7-a21a-12743e559fba}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CDT\src">
+      <UniqueIdentifier>{31ff9962-2678-4e50-ac51-325039eb34d9}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="framework.h">
       <Filter>header</Filter>
-    </ClInclude>
-    <ClInclude Include="poly2tri\poly2tri.h">
-      <Filter>poly2tri</Filter>
-    </ClInclude>
-    <ClInclude Include="poly2tri\common\dll_symbol.h">
-      <Filter>poly2tri</Filter>
-    </ClInclude>
-    <ClInclude Include="poly2tri\common\shapes.h">
-      <Filter>poly2tri</Filter>
-    </ClInclude>
-    <ClInclude Include="poly2tri\common\utils.h">
-      <Filter>poly2tri</Filter>
-    </ClInclude>
-    <ClInclude Include="poly2tri\sweep\advancing_front.h">
-      <Filter>poly2tri</Filter>
-    </ClInclude>
-    <ClInclude Include="poly2tri\sweep\cdt.h">
-      <Filter>poly2tri</Filter>
-    </ClInclude>
-    <ClInclude Include="poly2tri\sweep\sweep.h">
-      <Filter>poly2tri</Filter>
-    </ClInclude>
-    <ClInclude Include="poly2tri\sweep\sweep_context.h">
-      <Filter>poly2tri</Filter>
     </ClInclude>
     <ClInclude Include="Geometry.h">
       <Filter>header</Filter>
@@ -51,31 +45,91 @@
     <ClInclude Include="GeomCalc.h">
       <Filter>header</Filter>
     </ClInclude>
+    <ClInclude Include="Clipper2Lib\include\clipper2\clipper.core.h">
+      <Filter>Clipper2Lib\include\clipper2</Filter>
+    </ClInclude>
+    <ClInclude Include="Clipper2Lib\include\clipper2\clipper.engine.h">
+      <Filter>Clipper2Lib\include\clipper2</Filter>
+    </ClInclude>
+    <ClInclude Include="Clipper2Lib\include\clipper2\clipper.export.h">
+      <Filter>Clipper2Lib\include\clipper2</Filter>
+    </ClInclude>
+    <ClInclude Include="Clipper2Lib\include\clipper2\clipper.h">
+      <Filter>Clipper2Lib\include\clipper2</Filter>
+    </ClInclude>
+    <ClInclude Include="Clipper2Lib\include\clipper2\clipper.minkowski.h">
+      <Filter>Clipper2Lib\include\clipper2</Filter>
+    </ClInclude>
+    <ClInclude Include="Clipper2Lib\include\clipper2\clipper.offset.h">
+      <Filter>Clipper2Lib\include\clipper2</Filter>
+    </ClInclude>
+    <ClInclude Include="Clipper2Lib\include\clipper2\clipper.rectclip.h">
+      <Filter>Clipper2Lib\include\clipper2</Filter>
+    </ClInclude>
+    <ClInclude Include="Clipper2Lib\include\clipper2\clipper.triangulation.h">
+      <Filter>Clipper2Lib\include\clipper2</Filter>
+    </ClInclude>
+    <ClInclude Include="Clipper2Lib\include\clipper2\clipper.version.h">
+      <Filter>Clipper2Lib\include\clipper2</Filter>
+    </ClInclude>
+    <ClInclude Include="CDT\include\CDT.h">
+      <Filter>CDT\include</Filter>
+    </ClInclude>
+    <ClInclude Include="CDT\include\CDT.hpp">
+      <Filter>CDT\include</Filter>
+    </ClInclude>
+    <ClInclude Include="CDT\include\CDTUtils.h">
+      <Filter>CDT\include</Filter>
+    </ClInclude>
+    <ClInclude Include="CDT\include\CDTUtils.hpp">
+      <Filter>CDT\include</Filter>
+    </ClInclude>
+    <ClInclude Include="CDT\include\KDTree.h">
+      <Filter>CDT\include</Filter>
+    </ClInclude>
+    <ClInclude Include="CDT\include\LocatorKDTree.h">
+      <Filter>CDT\include</Filter>
+    </ClInclude>
+    <ClInclude Include="CDT\include\portable_nth_element.hpp">
+      <Filter>CDT\include</Filter>
+    </ClInclude>
+    <ClInclude Include="CDT\include\predicates.h">
+      <Filter>CDT\include</Filter>
+    </ClInclude>
+    <ClInclude Include="CDT\include\remove_at.hpp">
+      <Filter>CDT\include</Filter>
+    </ClInclude>
+    <ClInclude Include="CDT\include\Triangulation.h">
+      <Filter>CDT\include</Filter>
+    </ClInclude>
+    <ClInclude Include="CDT\include\Triangulation.hpp">
+      <Filter>CDT\include</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.cpp">
       <Filter>src</Filter>
-    </ClCompile>
-    <ClCompile Include="poly2tri\common\shapes.cc">
-      <Filter>poly2tri</Filter>
-    </ClCompile>
-    <ClCompile Include="poly2tri\sweep\advancing_front.cc">
-      <Filter>poly2tri</Filter>
-    </ClCompile>
-    <ClCompile Include="poly2tri\sweep\cdt.cc">
-      <Filter>poly2tri</Filter>
-    </ClCompile>
-    <ClCompile Include="poly2tri\sweep\sweep.cc">
-      <Filter>poly2tri</Filter>
-    </ClCompile>
-    <ClCompile Include="poly2tri\sweep\sweep_context.cc">
-      <Filter>poly2tri</Filter>
     </ClCompile>
     <ClCompile Include="Geometry.cpp">
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="GeomCalc.cpp">
       <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="Clipper2Lib\src\clipper.engine.cpp">
+      <Filter>Clipper2Lib\src</Filter>
+    </ClCompile>
+    <ClCompile Include="Clipper2Lib\src\clipper.offset.cpp">
+      <Filter>Clipper2Lib\src</Filter>
+    </ClCompile>
+    <ClCompile Include="Clipper2Lib\src\clipper.rectclip.cpp">
+      <Filter>Clipper2Lib\src</Filter>
+    </ClCompile>
+    <ClCompile Include="Clipper2Lib\src\clipper.triangulation.cpp">
+      <Filter>Clipper2Lib\src</Filter>
+    </ClCompile>
+    <ClCompile Include="CDT\src\CDT.cpp">
+      <Filter>CDT\src</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

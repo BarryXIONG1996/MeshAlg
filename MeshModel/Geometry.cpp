@@ -2,6 +2,61 @@
 
 const double g_epsilon = 1e-9;
 
+Vec2d Vec2d::operator+(const Vec2d& v) const {
+    return { x + v.x, y + v.y };
+}
+
+Vec2d Vec2d::operator-(const Vec2d& v) const {
+    return { x - v.x, y - v.y };
+}
+
+Vec2d Vec2d::operator*(double s) const {
+    return { x * s, y * s };
+}
+
+Vec2d Vec2d::operator/(double s) const {
+    return { x / s, y / s };
+}
+
+// 点积
+double Vec2d::Dot(const Vec2d& v) const {
+    return x * v.x + y * v.y;
+}
+
+// 2D 叉积（标量）
+double Vec2d::Cross(const Vec2d& v) const {
+    return x * v.y - y * v.x;
+}
+
+// 长度
+double Vec2d::Length() const {
+    return sqrt(x * x + y * y);
+}
+
+// 长度平方
+double Vec2d::LengthSq() const {
+    return x * x + y * y;
+}
+
+// 归一化
+Vec2d Vec2d::Normalization() const {
+    double len = Length();
+    if (len  < g_epsilon) {
+        return { 0.0, 0.0 };
+    }
+    return { x / len, y / len };
+}
+
+// 平行判断
+bool Vec2d::Parallel(const Vec2d& v) const {
+    return std::abs(Cross(v)) < g_epsilon;
+}
+
+// 相等判断
+bool Vec2d::Equal(const Vec2d& v) const {
+    return operator-(v).Length() < g_epsilon;
+}
+
 Vec3d Vec3d::operator-(const Vec3d& v) const {
     return Vec3d{ x - v.x, y - v.y, z - v.z };
 }
@@ -12,6 +67,10 @@ Vec3d Vec3d::operator+(const Vec3d& v) const {
 
 Vec3d Vec3d::operator*(double s) const {
     return Vec3d{ x * s, y * s, z * s };
+}
+
+Vec3d Vec3d::operator/(double s) const {
+    return { x / s, y / s, z / s };
 }
 
 double Vec3d::Dot(const Vec3d& v) const {
@@ -30,6 +89,11 @@ double Vec3d::Length() const {
     return sqrt(x * x + y * y + z * z);
 }
 
+double Vec3d::LengthSq() const
+{
+    return x * x + y * y + z * z;
+}
+
 Vec3d Vec3d::Normalization() const
 {
     double len = Length();
@@ -44,6 +108,11 @@ bool Vec3d::Parallel(const Vec3d& v) const
 {
     Vec3d crossVec = Cross(v);
     return crossVec.Length() < g_epsilon;
+}
+
+bool Vec3d::Equal(const Vec3d& v) const
+{
+    return operator-(v).Length() < g_epsilon;
 }
 
 bool Vec3dCmp::operator()(const Vec3d& a, const Vec3d& b) const {

@@ -2,10 +2,67 @@
 //
 
 #include <iostream>
+#include <vector>
+#include "Geometry.h"      // 你的 Vec3d 定义
+#include "GeomCalc.h"
 
-int main()
-{
-    std::cout << "Hello World!\n";
+void printPolygon(const std::vector<Vec3d>& poly, const char* name) {
+    std::cout << name << " (size=" << poly.size() << "):\n";
+    for (size_t i = 0; i < poly.size(); ++i) {
+        std::cout << "  (" << poly[i].x << ", " << poly[i].y << ", " << poly[i].z << ")\n";
+    }
+}
+
+void printMultiPolygon(const std::vector<std::vector<Vec3d>>& polys, const char* name) {
+    std::cout << name << " (num polygons=" << polys.size() << "):\n";
+    for (size_t i = 0; i < polys.size(); ++i) {
+        std::cout << "  Polygon " << i << ":\n";
+        std::vector<std::vector<Vec3d>> tris = GeomCalc::Triangulate(polys[i]);
+        for (const auto& p : polys[i]) {
+            std::cout << "    (" << p.x << ", " << p.y << ", " << p.z << ")\n";
+        }
+    }
+}
+
+int main() {
+    // === 场景：两个部分重叠的共面三角形（位于 z=0 平面）===
+    std::vector<Vec3d> tri1 = {
+        Vec3d{0.0, 0.0, 0.0},
+        Vec3d{2.0, 0.0, 0.0},
+        Vec3d{1.0, 1.0, 0.0 }
+    };
+
+    std::vector<Vec3d> tri2 = {
+        Vec3d{0.5, 0.0, 0.0},
+        Vec3d{1.5, 0.0, 0.0 },
+        Vec3d{1.0, 1.0, 0.0 }
+    };
+
+    // 输出容器
+    std::vector<std::vector<Vec3d>> tri1_minus_tri2;
+    std::vector<std::vector<Vec3d>> tri2_minus_tri1;
+    std::vector<Vec3d> intersection;
+
+    bool success = GeomCalc::TriRegionSplit(tri1, tri2, tri1_minus_tri2, tri2_minus_tri1, intersection);
+
+    if (!success) {
+        std::cout << "Error: Input triangles are degenerate or invalid.\n";
+        return -1;
+    }
+
+    // === 打印结果 ===
+    printMultiPolygon(tri1_minus_tri2, "tri1 \\ tri2");
+    printMultiPolygon(tri2_minus_tri1, "tri2 \\ tri1");
+    printPolygon(intersection, "tri1 ∩ tri2");
+
+    /*
+     预期结果（近似）：
+     - tri1 \ tri2: 一个四边形 [(0,0,0), (1,0,0), (1,1,0), (0,2,0)]
+     - tri2 \ tri1: 一个四边形 [(2,0,0), (3,0,0), (1,2,0), (1,1,0)]
+     - intersection: 一个三角形 [(1,0,0), (2,0,0), (1,1,0)] 或类似（Clipper2 可能顶点顺序不同）
+    */
+
+    return 0;
 }
 
 // 运行程序: Ctrl + F5 或调试 >“开始执行(不调试)”菜单

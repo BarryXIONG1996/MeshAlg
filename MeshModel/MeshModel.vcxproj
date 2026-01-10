@@ -112,6 +112,8 @@
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <AdditionalIncludeDirectories>$(ProjectDir)Clipper2Lib\include</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -129,6 +131,7 @@
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <AdditionalIncludeDirectories>$(ProjectDir)Clipper2Lib\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -139,27 +142,39 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="CDT\include\CDT.h" />
+    <ClInclude Include="CDT\include\CDT.hpp" />
+    <ClInclude Include="CDT\include\CDTUtils.h" />
+    <ClInclude Include="CDT\include\CDTUtils.hpp" />
+    <ClInclude Include="CDT\include\KDTree.h" />
+    <ClInclude Include="CDT\include\LocatorKDTree.h" />
+    <ClInclude Include="CDT\include\portable_nth_element.hpp" />
+    <ClInclude Include="CDT\include\predicates.h" />
+    <ClInclude Include="CDT\include\remove_at.hpp" />
+    <ClInclude Include="CDT\include\Triangulation.h" />
+    <ClInclude Include="CDT\include\Triangulation.hpp" />
+    <ClInclude Include="Clipper2Lib\include\clipper2\clipper.core.h" />
+    <ClInclude Include="Clipper2Lib\include\clipper2\clipper.engine.h" />
+    <ClInclude Include="Clipper2Lib\include\clipper2\clipper.export.h" />
+    <ClInclude Include="Clipper2Lib\include\clipper2\clipper.h" />
+    <ClInclude Include="Clipper2Lib\include\clipper2\clipper.minkowski.h" />
+    <ClInclude Include="Clipper2Lib\include\clipper2\clipper.offset.h" />
+    <ClInclude Include="Clipper2Lib\include\clipper2\clipper.rectclip.h" />
+    <ClInclude Include="Clipper2Lib\include\clipper2\clipper.triangulation.h" />
+    <ClInclude Include="Clipper2Lib\include\clipper2\clipper.version.h" />
     <ClInclude Include="framework.h" />
     <ClInclude Include="GeomCalc.h" />
     <ClInclude Include="Geometry.h" />
-    <ClInclude Include="poly2tri\common\dll_symbol.h" />
-    <ClInclude Include="poly2tri\common\shapes.h" />
-    <ClInclude Include="poly2tri\common\utils.h" />
-    <ClInclude Include="poly2tri\poly2tri.h" />
-    <ClInclude Include="poly2tri\sweep\advancing_front.h" />
-    <ClInclude Include="poly2tri\sweep\cdt.h" />
-    <ClInclude Include="poly2tri\sweep\sweep.h" />
-    <ClInclude Include="poly2tri\sweep\sweep_context.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="CDT\src\CDT.cpp" />
+    <ClCompile Include="Clipper2Lib\src\clipper.engine.cpp" />
+    <ClCompile Include="Clipper2Lib\src\clipper.offset.cpp" />
+    <ClCompile Include="Clipper2Lib\src\clipper.rectclip.cpp" />
+    <ClCompile Include="Clipper2Lib\src\clipper.triangulation.cpp" />
     <ClCompile Include="dllmain.cpp" />
     <ClCompile Include="GeomCalc.cpp" />
     <ClCompile Include="Geometry.cpp" />
-    <ClCompile Include="poly2tri\common\shapes.cc" />
-    <ClCompile Include="poly2tri\sweep\advancing_front.cc" />
-    <ClCompile Include="poly2tri\sweep\cdt.cc" />
-    <ClCompile Include="poly2tri\sweep\sweep.cc" />
-    <ClCompile Include="poly2tri\sweep\sweep_context.cc" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

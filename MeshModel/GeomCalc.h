@@ -12,6 +12,12 @@ struct MESHMODELDLL GeomCalc
     // 计算点到面的距离
     static double Point2PlaneDistatnce(Vec3d const& pnt, Vec3d const& o, Vec3d const& n);
 
+    // 计算面面交线
+    static bool CalPlanePlaneIntersection(Vec3d const& o1, Vec3d const& dir1, Vec3d const& o2, Vec3d const& dir2, Vec3d& intO, Vec3d& intDir);
+
+    // 计算直线和线段交点
+    static bool CalLineSegmentIntersection(Vec3d const& o, Vec3d const& dir, Vec3d const& segS, Vec3d const& segE, double& param);
+
     // 三角形共面裁剪
     static bool TriRegionSplit(
         std::vector<Vec3d>const& tri1, 

@@ -73,6 +73,11 @@ double GeomCalc::Point2PlaneDistatnce(Vec3d const& pnt, Vec3d const& o, Vec3d co
     return std::fabs(n.Dot(Vec3d(pnt - o)));
 }
 
+bool GeomCalc::CalPlanePlaneIntersection(Vec3d const& o1, Vec3d const& dir1, Vec3d const& o2, Vec3d const& dir2, Vec3d& intO, Vec3d& intDir)
+{
+    return false;
+}
+
 using namespace Clipper2Lib;
 
 bool GeomCalc::TriRegionSplit(

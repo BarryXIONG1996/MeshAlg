@@ -24,7 +24,7 @@ public:
 };
 
 class RTreeAccelerator : public SpatialAccelerator {
-    virtual void Build(std::vector<Face*>& faces) override 
+    virtual void Build(std::vector<Face*>& faces) override
     {
         // 构建R树
         for (Face* face : faces) {
@@ -33,7 +33,7 @@ class RTreeAccelerator : public SpatialAccelerator {
         }
     }
 
-    virtual std::vector<Face*> Query(const BndBox3d& box) override 
+    virtual std::vector<Face*> Query(const BndBox3d& box) override
     {
         // 查询R树
         std::vector<Face*> result;
@@ -56,40 +56,47 @@ MeshIntersector::MeshIntersector(TopoTriMesh& m1, TopoTriMesh& m2)
 
 bool MeshIntersector::Execute(TopoTriMesh& coPlanes)
 {
-    // 1、构建空间搜索树
+    auto IntersectProcess = [&](std::function<void(Face*, Face*)> intersectFunc, bool coPlanar) {
+        // 1、构建空间搜索树
     // 计算工具集和目标集的包围盒
-    BndBox3d boundingBoxO = m_mesh1.GetBndBox();
-    BndBox3d boundingBoxT = m_mesh2.GetBndBox();
-    // 计算包围盒的交集
-    BndBox3d intBox = boundingBoxO.Intersect(boundingBoxT);
-    // 遍历工具集中的所有三角面片
-    std::vector<Face*>const& facesT = m_mesh2.fs;
-    std::vector<Face*> intersectingFaces;
-    for (Face* face : facesT) {
-        // 检查三角面片的包围盒是否与intBox相交
-        if (!face->bbox.IsOut(intBox)) {
-            intersectingFaces.push_back(face);
+        BndBox3d boundingBoxO = m_mesh1.GetBndBox();
+        BndBox3d boundingBoxT = m_mesh2.GetBndBox();
+        // 计算包围盒的交集
+        BndBox3d intBox = boundingBoxO.Intersect(boundingBoxT);
+        // 遍历工具集中的所有三角面片
+        std::vector<Face*>const& facesT = m_mesh2.fs;
+        std::vector<Face*> intersectingFaces;
+        for (Face* face : facesT) {
+            // 检查三角面片的包围盒是否与intBox相交
+            if (!face->bbox.IsOut(intBox)) {
+                intersectingFaces.push_back(face);
+            }
         }
-    }
-    // 将相交的面片添加到空间搜索树
-    std::shared_ptr<SpatialAccelerator> accelerator = std::make_shared<RTreeAccelerator>();
-    accelerator->Build(intersectingFaces);
+        // 将相交的面片添加到空间搜索树
+        std::shared_ptr<SpatialAccelerator> accelerator = std::make_shared<RTreeAccelerator>();
+        accelerator->Build(intersectingFaces);
 
-    // 2、相交测试
-    std::vector<Face*>const& facesO = m_mesh1.fs;
-    for (Face* face : facesO)
-    {
-        // 过滤掉与包围盒不相交的三角面片
-        if (face->bbox.IsOut(intBox))
-            continue;
-        // 查询空间搜索树，获取可能相交的面片
-        std::vector<Face*> candidateFaces = accelerator->Query(face->bbox);
-        for (Face* candidateFace : candidateFaces) {
-            // 3、面片之间的相交计算
-            FaceFaceInt(face, candidateFace);
+        // 2、相交测试
+        std::vector<Face*>const& facesO = m_mesh1.fs;
+        for (Face* face : facesO)
+        {
+            // 过滤掉与包围盒不相交的三角面片
+            if (face->bbox.IsOut(intBox))
+                continue;
+            // 查询空间搜索树，获取可能相交的面片
+            std::vector<Face*> candidateFaces = accelerator->Query(face->bbox);
+            for (Face* candidateFace : candidateFaces) {
+                // 3、面片之间的相交计算
+                FaceFaceInt(face, candidateFace, intersectFunc, coPlanar);
+            }
         }
-    }
-    
+        };
+
+    // 首先, 计算共面部分并移除
+    IntersectProcess(std::bind(&MeshIntersector::CoPlanarFaceInt, this, std::placeholders::_1, std::placeholders::_2), true);
+    // 然后, 非共面部分进行求交
+    IntersectProcess(std::bind(&MeshIntersector::NonCoPlanarFaceInt, this, std::placeholders::_1, std::placeholders::_2), true);
+
     coPlanes = m_coPlanes;
 
     return true;
@@ -100,7 +107,7 @@ std::vector<Vec3d> MeshIntersector::EdgeEdgeInt(Edge* e1, Edge* e2)
     return std::vector<Vec3d>();
 }
 
-void MeshIntersector::FaceFaceInt(Face* f1, Face* f2)
+void MeshIntersector::FaceFaceInt(Face* f1, Face* f2, std::function<void(Face*, Face*)> intersectFunc, bool coPlanar)
 {
     if (f1->bbox.IsOut(f2->bbox))
         return;
@@ -121,13 +128,15 @@ void MeshIntersector::FaceFaceInt(Face* f1, Face* f2)
             return; // 不共面
 
         // 共面
-        CoPlanarFaceInt(f1, f2);
-
-        return;
+        if (coPlanar)
+            intersectFunc(f1, f2);
     }
-
-    // 面不平行
-    NonCoPlanarFaceInt(f1, f2);
+    else
+    {
+        // 面不平行
+        if (!coPlanar)
+            intersectFunc(f1, f2);
+    }
 
     return;
 }
@@ -235,7 +244,7 @@ void MeshIntersector::CoPlanarFaceInt(Face* f1, Face* f2)
             std::vector<Vec3d> newPoly = BuildPolygonWithEdgePoints(cF, e.first, e.second);
             poly2s.push_back(std::move(newPoly));
         }
-        m_mesh2.RemoveFace(cF); 
+        m_mesh2.RemoveFace(cF);
         m_mesh2.RemoveEdge(e.first);
     }
 
@@ -260,4 +269,58 @@ void MeshIntersector::CoPlanarFaceInt(Face* f1, Face* f2)
 
 void MeshIntersector::NonCoPlanarFaceInt(Face* f1, Face* f2)
 {
+    // 计算f1,f2所在面的交线
+    Vec3d o1, dir1, o2, dir2, intO, intDir;
+    // Todo: 计算o dir
+    if (!GeomCalc::CalPlanePlaneIntersection(o1, dir1, o2, dir2, intO, intDir))
+        return;
+
+
+    // 计算线面交点
+    struct DbCompare
+    {
+        bool operator()(double const& d1, double const& d2) const
+        {
+            return d1 < d2 - g_epsilon;
+        }
+    };
+    enum topoType { EdgeType, VertexType };
+    std::vector<Edge*> es1 = f1->getEdges(), es2 = f2->getEdges();
+    std::set<double, DbCompare> params1, params2;
+    std::vector<void*> topos1, topos2;
+    std::vector<topoType> topoTypes1, topoTypes2;
+    for (auto& e : es1)
+    {
+        if (!e) return;
+        std::vector<Vec3d> pnts = e->getPnts();
+        if (pnts.size() != 2) return;
+        double param = 0.0;
+        if (!GeomCalc::CalLineSegmentIntersection(intO, intDir, pnts.front(), pnts.back(), param))
+            continue;
+        if (params1.count(param)) continue; // 避免交点重复添加
+        params1.insert(param);
+        if (param < g_epsilon)
+        {
+            topos1.push_back(e->v1);
+            topoTypes1.push_back(VertexType);
+        }
+        else if (param > 1 - g_epsilon)
+        {
+            topos1.push_back(e->v2);
+            topoTypes1.push_back(VertexType);
+        }
+        else
+        {
+            topos1.push_back(e);
+            topoTypes1.push_back(EdgeType);
+        }
+    }
+
+
+    // 交点合并
+    if (params1.size() < 2 || params2.size() /*只交一个点，不算相交*/
+        || *params1.rbegin() < *params2.begin() - g_epsilon || *params1.begin() > *params2.rbegin())
+        return;
+
+
 }

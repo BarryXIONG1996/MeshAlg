@@ -1,4 +1,5 @@
 #include "TopoTriMesh.h"
+#include <set>
 
 BndBox3d TopoTriMesh::GetBndBox() {
     BndBox3d bbox;
@@ -199,6 +200,16 @@ std::vector<Edge*> Vertex::GetAdjacentEdges()
     } while (curEdge && curEdge != startEdge);
 
     return cEdges;
+}
+
+std::vector<Face*> Vertex::GetAdjacentFaces()
+{
+    std::set<Face*> faces;
+    for (Edge* e : GetAdjacentEdges()) {
+        if (e->lF) faces.insert(e->lF);
+        if (e->rF) faces.insert(e->rF);
+    }
+    return std::vector<Face*>(faces.begin(), faces.end());
 }
 
 std::vector<Edge*> Face::getEdges()

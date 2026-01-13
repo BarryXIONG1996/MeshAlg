@@ -4,11 +4,13 @@
 #include <Geometry.h>
 
 struct Edge;
+struct Face;
 struct Vertex {
     Vec3d pnt;
     Edge* e;        // »Œ“ª±ﬂ
     int posTag;     // 0=default, 1=in, 2=out, 3=on
     std::vector<Edge*> GetAdjacentEdges();
+    std::vector<Face*> GetAdjacentFaces();
 };
 
 struct Face;

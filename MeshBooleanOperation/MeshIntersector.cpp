@@ -267,60 +267,193 @@ void MeshIntersector::CoPlanarFaceInt(Face* f1, Face* f2)
         m_coPlanes.AddFace2TopoTriMesh(tri);
 }
 
-void MeshIntersector::NonCoPlanarFaceInt(Face* f1, Face* f2)
+enum class TopoType { EdgeType, VertexType };
+
+struct IntersectionInfo {
+    double param;
+    void* topo;
+    TopoType type;
+};
+
+// 根据两个交点信息构建 efs 和权重
+static std::pair<int, std::set<std::pair<Edge*, Face*>>> BuildEfsAndWeight(const IntersectionInfo& info1, const IntersectionInfo& info2, Face* otherFace = nullptr)
 {
-    // 计算f1,f2所在面的交线
-    Vec3d o1, dir1, o2, dir2, intO, intDir;
-    // Todo: 计算o dir
-    if (!GeomCalc::CalPlanePlaneIntersection(o1, dir1, o2, dir2, intO, intDir))
-        return;
+    std::set<std::pair<Edge*, Face*>> efs;
+    int weight = 0;
 
-
-    // 计算线面交点
-    struct DbCompare
-    {
-        bool operator()(double const& d1, double const& d2) const
-        {
-            return d1 < d2 - g_epsilon;
+    if (info1.type == TopoType::EdgeType && info2.type == TopoType::EdgeType) {
+        weight = 2;
+        Edge* e1 = static_cast<Edge*>(info1.topo);
+        Edge* e2 = static_cast<Edge*>(info2.topo);
+        if (e1->lF) efs.insert({ e2, e1->lF });
+        if (e1->rF) efs.insert({ e2, e1->rF });
+        if (e2->lF) efs.insert({ e1, e2->lF });
+        if (e2->rF) efs.insert({ e1, e2->rF });
+    }
+    else if (info1.type == TopoType::EdgeType && info2.type == TopoType::VertexType) {
+        weight = 3;
+        Edge* e1 = static_cast<Edge*>(info1.topo);
+        Vertex* v2 = static_cast<Vertex*>(info2.topo);
+        auto cfs2 = v2->GetAdjacentFaces();
+        for (Edge* ce : v2->GetAdjacentEdges()) {
+            if (e1->lF) efs.insert({ ce, e1->lF });
+            if (e1->rF) efs.insert({ ce, e1->rF });
         }
-    };
-    enum topoType { EdgeType, VertexType };
-    std::vector<Edge*> es1 = f1->getEdges(), es2 = f2->getEdges();
-    std::set<double, DbCompare> params1, params2;
-    std::vector<void*> topos1, topos2;
-    std::vector<topoType> topoTypes1, topoTypes2;
-    for (auto& e : es1)
-    {
-        if (!e) return;
-        std::vector<Vec3d> pnts = e->getPnts();
-        if (pnts.size() != 2) return;
-        double param = 0.0;
-        if (!GeomCalc::CalLineSegmentIntersection(intO, intDir, pnts.front(), pnts.back(), param))
-            continue;
-        if (params1.count(param)) continue; // 避免交点重复添加
-        params1.insert(param);
-        if (param < g_epsilon)
-        {
-            topos1.push_back(e->v1);
-            topoTypes1.push_back(VertexType);
+        for (Face* cf : cfs2) {
+            if (cf) efs.insert({ e1, cf });
         }
-        else if (param > 1 - g_epsilon)
-        {
-            topos1.push_back(e->v2);
-            topoTypes1.push_back(VertexType);
+    }
+    else if (info1.type == TopoType::VertexType && info2.type == TopoType::EdgeType) {
+        weight = 3;
+        Vertex* v1 = static_cast<Vertex*>(info1.topo);
+        Edge* e2 = static_cast<Edge*>(info2.topo);
+        auto cfs1 = v1->GetAdjacentFaces();
+        for (Edge* ce : v1->GetAdjacentEdges()) {
+            if (e2->lF) efs.insert({ ce, e2->lF });
+            if (e2->rF) efs.insert({ ce, e2->rF });
         }
-        else
-        {
-            topos1.push_back(e);
-            topoTypes1.push_back(EdgeType);
+        for (Face* cf : cfs1) {
+            if (cf) efs.insert({ e2, cf });
+        }
+    }
+    else { // Vertex-Vertex
+        weight = 4;
+        Vertex* v1 = static_cast<Vertex*>(info1.topo);
+        Vertex* v2 = static_cast<Vertex*>(info2.topo);
+        auto cfs1 = v1->GetAdjacentFaces();
+        auto cfs2 = v2->GetAdjacentFaces();
+        for (Edge* ce : v1->GetAdjacentEdges()) {
+            for (Face* cf : cfs2) efs.insert({ ce, cf });
+        }
+        for (Edge* ce : v2->GetAdjacentEdges()) {
+            for (Face* cf : cfs1) efs.insert({ ce, cf });
         }
     }
 
+    return { weight, efs };
+}
 
-    // 交点合并
-    if (params1.size() < 2 || params2.size() /*只交一个点，不算相交*/
-        || *params1.rbegin() < *params2.begin() - g_epsilon || *params1.begin() > *params2.rbegin())
+// 处理“面”与拓扑元素相交的情况（即一个端点来自另一面内部）
+static std::pair<int, std::set<std::pair<Edge*, Face*>>> BuildEfsForFaceIntersect(const IntersectionInfo& info, Face* faceOnOtherSide)
+{
+    std::set<std::pair<Edge*, Face*>> efs;
+    int weight = (info.type == TopoType::EdgeType) ? 1 : 2;
+
+    if (info.type == TopoType::EdgeType) {
+        efs.insert({ static_cast<Edge*>(info.topo), faceOnOtherSide });
+    }
+    else {
+        Vertex* v = static_cast<Vertex*>(info.topo);
+        for (Edge* ce : v->GetAdjacentEdges()) {
+            efs.insert({ ce, faceOnOtherSide });
+        }
+    }
+
+    return { weight, efs };
+}
+
+void MeshIntersector::NonCoPlanarFaceInt(Face* f1, Face* f2)
+{
+    // --- 平面求交 ---
+    auto ps1 = f1->getPnts(), ps2 = f2->getPnts();
+    if (ps1.size() < 3 || ps2.size() < 3) return;
+
+    Vec3d o1 = ps1[0], norm1 = GeomCalc::CompuateNormal(ps1);
+    Vec3d o2 = ps2[0], norm2 = GeomCalc::CompuateNormal(ps2);
+    Vec3d intO, intDir;
+    if (!GeomCalc::CalPlanePlaneIntersection(o1, norm1, o2, norm2, intO, intDir))
         return;
 
+    // --- 收集交点参数 ---
+    struct DbCompare {
+        bool operator()(double a, double b) const { return a < b - g_epsilon; }
+    };
+    using ParamMap = std::map<double, std::tuple<void*, TopoType>, DbCompare>;
+    ParamMap param1, param2;
 
+    auto collectParams = [&](const std::vector<Edge*>& edges, ParamMap& out) {
+        for (Edge* e : edges) {
+            if (!e) continue;
+            auto pnts = e->getPnts();
+            if (pnts.size() != 2) continue;
+            double t;
+            if (!GeomCalc::CalLineSegmentIntersection(intO, intDir, pnts[0], pnts[1], t))
+                continue;
+            if (t < g_epsilon) {
+                out[t] = { e->v1, TopoType::VertexType };
+            }
+            else if (t > 1 - g_epsilon) {
+                out[t] = { e->v2, TopoType::VertexType };
+            }
+            else {
+                out[t] = { e, TopoType::EdgeType };
+            }
+        }
+    };
+
+    collectParams(f1->getEdges(), param1);
+    collectParams(f2->getEdges(), param2);
+
+    // --- 有效性检查 ---
+    if (param1.size() < 2 || param2.size() < 2) return;
+    double t1_min = param1.begin()->first, t1_max = param1.rbegin()->first;
+    double t2_min = param2.begin()->first, t2_max = param2.rbegin()->first;
+    if (t1_max <= t2_min + g_epsilon || t2_max <= t1_min + g_epsilon) return;
+
+    // --- 提取端点信息 ---
+    auto makeInfo = [](const ParamMap::value_type& kv) {
+        return IntersectionInfo{ kv.first, std::get<0>(kv.second), std::get<1>(kv.second) };
+    };
+
+    IntersectionInfo p1_start = makeInfo(*param1.begin());
+    IntersectionInfo p1_end = makeInfo(*param1.rbegin());
+    IntersectionInfo p2_start = makeInfo(*param2.begin());
+    IntersectionInfo p2_end = makeInfo(*param2.rbegin());
+
+    std::vector<Vec3d> intPnts;
+    std::vector<int> weights;
+    std::vector<std::set<std::pair<Edge*, Face*>>> allEfs;
+
+    // --- 处理起点 ---
+    if (std::abs(p1_start.param - p2_start.param) <= g_epsilon) {
+        auto [w, efs] = BuildEfsAndWeight(p1_start, p2_start);
+        weights.push_back(w);
+        allEfs.push_back(efs);
+        intPnts.push_back(intO + intDir * p1_start.param);
+    }
+    else if (p1_start.param < p2_start.param) {
+        auto [w, efs] = BuildEfsForFaceIntersect(p2_start, f1);
+        weights.push_back(w);
+        allEfs.push_back(efs);
+        intPnts.push_back(intO + intDir * p2_start.param);
+    }
+    else {
+        auto [w, efs] = BuildEfsForFaceIntersect(p1_start, f2);
+        weights.push_back(w);
+        allEfs.push_back(efs);
+        intPnts.push_back(intO + intDir * p1_start.param);
+    }
+
+    // --- 处理终点 ---
+    if (std::abs(p1_end.param - p2_end.param) < g_epsilon) {
+        auto [w, efs] = BuildEfsAndWeight(p1_end, p2_end);
+        weights.push_back(w);
+        allEfs.push_back(efs);
+        intPnts.push_back(intO + intDir * p1_end.param);
+    }
+    else if (p2_end.param < p1_end.param) {
+        auto [w, efs] = BuildEfsForFaceIntersect(p1_end, f2);
+        weights.push_back(w);
+        allEfs.push_back(efs);
+        intPnts.push_back(intO + intDir * p1_end.param);
+    }
+    else {
+        auto [w, efs] = BuildEfsForFaceIntersect(p2_end, f1);
+        weights.push_back(w);
+        allEfs.push_back(efs);
+        intPnts.push_back(intO + intDir * p2_end.param);
+    }
+
+    // --- 存储结果 ---
+    
 }

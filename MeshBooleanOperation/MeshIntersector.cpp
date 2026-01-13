@@ -458,16 +458,49 @@ void MeshIntersector::NonCoPlanarFaceInt(Face* f1, Face* f2)
     if (intPnts.size() != weights.size() || intPnts.size() != allEfs.size() || intPnts.size() != 2)
         return;
     std::vector<int> seg;
-    for (int intIdx = 0; intIdx < intPnts.size(); ++intIdx) {
+    for (int intIdx = 0; intIdx < intPnts.size(); ++intIdx) 
+    {
         auto const& efs = allEfs.at(intIdx);
         bool exist = false;
-        for (auto const& ef : efs) {
-            if (m_ef2Int.count(ef)) {
-                exist = true;
-
+        for (auto const& ef : efs) 
+        {
+            if (!m_ef2Int.count(ef))
+                continue;
+            exist = true;
+            if (m_ef2Int.at(ef).size() >= 2)
+            {
+                assert("线面交点多于2个，错误！");
+                return;
+            }
+            double w = weights.at(intIdx);
+            int otherIntIdx = *m_ef2Int.at(ef).begin();
+            double otherIntW = m_weights.at(otherIntIdx);
+            if (w >= 2.0 && otherIntW >= 2.0) // 线面共面，此时可以有两个交点
+            {
+                m_intersectPnts.push_back(intPnts.at(intIdx));
+                m_weights.push_back(w);
+                int segEndIdx = m_intersectPnts.size() - 1;
+                seg.push_back(segEndIdx);
+            }
+            else
+            {
+                if (w > otherIntW)
+                {
+                    m_intersectPnts.at(otherIntIdx) = intPnts.at(intIdx);
+                    m_weights.at(otherIntIdx) = weights.at(intIdx);
+                }
+                seg.push_back(otherIntIdx);
             }
         }
-        if (!exist)
+
+        if (exist)
+        {
+            for (auto const& ef : efs)
+            {
+                m_ef2Int[ef].insert(seg.back());
+            }
+        }
+        else
         {
             m_intersectPnts.push_back(intPnts.at(intIdx));
             m_weights.push_back(weights.at(intIdx));
@@ -480,4 +513,7 @@ void MeshIntersector::NonCoPlanarFaceInt(Face* f1, Face* f2)
         }
     }
     m_intSegs.push_back({ seg.front(),seg.back() });
+    int intSegIndex = m_intSegs.size() - 1;
+    m_face2IntSegs[f1].insert(intSegIndex);
+    m_face2IntSegs[f2].insert(intSegIndex);
 }

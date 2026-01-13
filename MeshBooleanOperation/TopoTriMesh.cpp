@@ -1,5 +1,4 @@
 #include "TopoTriMesh.h"
-#include <set>
 
 BndBox3d TopoTriMesh::GetBndBox() {
     BndBox3d bbox;

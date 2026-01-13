@@ -455,5 +455,29 @@ void MeshIntersector::NonCoPlanarFaceInt(Face* f1, Face* f2)
     }
 
     // --- ´æ´¢½á¹û ---
-    
+    if (intPnts.size() != weights.size() || intPnts.size() != allEfs.size() || intPnts.size() != 2)
+        return;
+    std::vector<int> seg;
+    for (int intIdx = 0; intIdx < intPnts.size(); ++intIdx) {
+        auto const& efs = allEfs.at(intIdx);
+        bool exist = false;
+        for (auto const& ef : efs) {
+            if (m_ef2Int.count(ef)) {
+                exist = true;
+
+            }
+        }
+        if (!exist)
+        {
+            m_intersectPnts.push_back(intPnts.at(intIdx));
+            m_weights.push_back(weights.at(intIdx));
+            int segEndIdx = m_intersectPnts.size() - 1;
+            seg.push_back(segEndIdx);
+            for (auto const& ef : efs)
+            {
+                m_ef2Int.insert({ ef, {(int)segEndIdx} });
+            }
+        }
+    }
+    m_intSegs.push_back({ seg.front(),seg.back() });
 }

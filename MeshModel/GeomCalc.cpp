@@ -73,9 +73,29 @@ double GeomCalc::Point2PlaneDistatnce(Vec3d const& pnt, Vec3d const& o, Vec3d co
     return std::fabs(n.Dot(Vec3d(pnt - o)));
 }
 
-bool GeomCalc::CalPlanePlaneIntersection(Vec3d const& o1, Vec3d const& dir1, Vec3d const& o2, Vec3d const& dir2, Vec3d& intO, Vec3d& intDir)
+bool GeomCalc::CalPlanePlaneIntersection(
+    Vec3d const& o1, Vec3d const& n1,
+    Vec3d const& o2, Vec3d const& n2,
+    Vec3d& intO,
+    Vec3d& intDir)
 {
-    return false;
+    const double eps = g_epsilon;
+    Vec3d cross = n1.Cross(n2);
+    double denom = cross.Dot(cross);
+
+    if (denom < eps) {
+        // 平面平行
+        return false; // 无论共面与否，按你原逻辑不处理
+    }
+
+    intDir = cross / std::sqrt(denom); // 单位方向
+
+    double d1 = n1.Dot(o1);
+    double d2 = n2.Dot(o2);
+    Vec3d temp = n1 * d2 - n2 * d1;
+    intO = cross.Cross(temp) / denom;
+
+    return true;
 }
 
 bool GeomCalc::CalLineSegmentIntersection(

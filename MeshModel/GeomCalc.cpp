@@ -78,9 +78,83 @@ bool GeomCalc::CalPlanePlaneIntersection(Vec3d const& o1, Vec3d const& dir1, Vec
     return false;
 }
 
-bool GeomCalc::CalLineSegmentIntersection(Vec3d const& o, Vec3d const& dir, Vec3d const& segS, Vec3d const& segE, double& lnP1, double& SegP2)
+bool GeomCalc::CalLineSegmentIntersection(
+    Vec3d const& origin,      // 无限直线起点
+    Vec3d const& direction,   // 无限直线方向
+    Vec3d const& pt1,         // 线段起点
+    Vec3d const& pt2,         // 线段终点
+    double& lnP1,             // 输出：直线参数 t
+    double& SegP2)            // 输出：线段参数 u ∈ [0,1]
 {
-    return false;
+    const double eps = g_epsilon;
+
+    // --- Step 1: 检查退化 ---
+    Vec3d segDir = pt2 - pt1;
+    double segLen2 = segDir.Dot(segDir);
+    double lineLen2 = direction.Dot(direction);
+
+    if (segLen2 < eps || lineLen2 < eps) {
+        return false; // 线段或直线退化为点
+    }
+
+    // --- Step 2: 判断两直线是否平行 ---
+    Vec3d cross = direction.Cross(segDir);
+    if (cross.Length() < eps) {
+        return false; // 平行（含共线），按题意不处理
+    }
+
+    // --- Step 3: 构造辅助平面 ---
+    // 平面过 'origin'，法向为 cross = direction × segDir
+    // 此平面包含原直线（因 direction perp cross）
+    Vec3d planeOrigin = origin;
+    Vec3d planeNormal = direction.Cross(cross); // 关键：用叉积作为平面法向
+
+    // --- Step 4: 求线段所在直线与该平面的交点参数 u ---
+    double u;
+    if (!linePlaneIntersect(pt1, segDir, planeOrigin, planeNormal, u)) {
+        // 理论上不会发生，因为 segDir · cross = |direction × segDir|^2 != 0
+        return false;
+    }
+
+    // --- Step 5: 检查交点是否在线段上 ---
+    if (u < -eps || u > 1.0 + eps) {
+        return false;
+    }
+
+    // --- Step 6: 验证交点到原直线的距离（可选但推荐）---
+    Vec3d intersectPnt = pt1 + segDir * u;
+    Vec3d w = intersectPnt - origin;
+    double dist = direction.Cross(w).Length() / std::sqrt(lineLen2);
+    if (dist > eps) {
+        return false;
+    }
+
+    // --- Step 7: 计算直线参数 t ---
+    double t = w.Dot(direction) / lineLen2;
+
+    lnP1 = t;
+    SegP2 = std::clamp(u, 0.0, 1.0);
+    return true;
+}
+
+// 计算直线与平面的交点参数
+// 直线: P(t) = lineOrigin + t * lineDir
+// 平面: (X - planeOrigin) · planeNormal = 0
+// 返回: 是否相交；若相交，t 为交点参数
+bool GeomCalc::linePlaneIntersect(
+    const Vec3d& lineOrigin,
+    const Vec3d& lineDir,
+    const Vec3d& planeOrigin,
+    const Vec3d& planeNormal,
+    double& t)
+{
+    const double eps = g_epsilon;
+    double denom = lineDir.Dot(planeNormal);
+    if (std::abs(denom) < eps) {
+        return false; // 直线与平面平行
+    }
+    t = (planeOrigin - lineOrigin).Dot(planeNormal) / denom;
+    return true;
 }
 
 using namespace Clipper2Lib;

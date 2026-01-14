@@ -18,6 +18,14 @@ struct MESHMODELDLL GeomCalc
     // 计算直线和线段交点
     static bool CalLineSegmentIntersection(Vec3d const& o, Vec3d const& dir, Vec3d const& segS, Vec3d const& segE, double& lnP1/*直线参数*/, double& SegP2/*线段参数*/);
 
+    // 直线和平面求交
+    static bool linePlaneIntersect(
+        const Vec3d& lineOrigin,
+        const Vec3d& lineDir,
+        const Vec3d& planeOrigin,
+        const Vec3d& planeNormal,
+        double& t);
+
     // 三角形共面裁剪
     static bool TriRegionSplit(
         std::vector<Vec3d>const& tri1, 

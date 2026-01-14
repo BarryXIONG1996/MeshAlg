@@ -78,6 +78,11 @@ bool GeomCalc::CalPlanePlaneIntersection(Vec3d const& o1, Vec3d const& dir1, Vec
     return false;
 }
 
+bool GeomCalc::CalLineSegmentIntersection(Vec3d const& o, Vec3d const& dir, Vec3d const& segS, Vec3d const& segE, double& lnP1, double& SegP2)
+{
+    return false;
+}
+
 using namespace Clipper2Lib;
 
 bool GeomCalc::TriRegionSplit(

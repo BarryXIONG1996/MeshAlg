@@ -90,12 +90,12 @@ bool MeshIntersector::Execute(TopoTriMesh& coPlanes)
                 FaceFaceInt(face, candidateFace, intersectFunc, coPlanar);
             }
         }
-        };
+    };
 
     // 首先, 计算共面部分并移除
     IntersectProcess(std::bind(&MeshIntersector::CoPlanarFaceInt, this, std::placeholders::_1, std::placeholders::_2), true);
     // 然后, 非共面部分进行求交
-    IntersectProcess(std::bind(&MeshIntersector::NonCoPlanarFaceInt, this, std::placeholders::_1, std::placeholders::_2), true);
+    IntersectProcess(std::bind(&MeshIntersector::NonCoPlanarFaceInt, this, std::placeholders::_1, std::placeholders::_2), false);
 
     coPlanes = m_coPlanes;
 
@@ -281,6 +281,8 @@ static std::pair<int, std::set<std::pair<Edge*, Face*>>> BuildEfsAndWeight(const
     std::set<std::pair<Edge*, Face*>> efs;
     int weight = 0;
 
+    if (!info1.topo || !info2.topo) return {};
+
     if (info1.type == TopoType::EdgeType && info2.type == TopoType::EdgeType) {
         weight = 2;
         Edge* e1 = static_cast<Edge*>(info1.topo);
@@ -294,12 +296,12 @@ static std::pair<int, std::set<std::pair<Edge*, Face*>>> BuildEfsAndWeight(const
         weight = 3;
         Edge* e1 = static_cast<Edge*>(info1.topo);
         Vertex* v2 = static_cast<Vertex*>(info2.topo);
-        auto cfs2 = v2->GetAdjacentFaces();
         for (Edge* ce : v2->GetAdjacentEdges()) {
+            if (!ce) continue;
             if (e1->lF) efs.insert({ ce, e1->lF });
             if (e1->rF) efs.insert({ ce, e1->rF });
         }
-        for (Face* cf : cfs2) {
+        for (Face* cf : v2->GetAdjacentFaces()) {
             if (cf) efs.insert({ e1, cf });
         }
     }
@@ -307,12 +309,12 @@ static std::pair<int, std::set<std::pair<Edge*, Face*>>> BuildEfsAndWeight(const
         weight = 3;
         Vertex* v1 = static_cast<Vertex*>(info1.topo);
         Edge* e2 = static_cast<Edge*>(info2.topo);
-        auto cfs1 = v1->GetAdjacentFaces();
         for (Edge* ce : v1->GetAdjacentEdges()) {
+            if (!ce) continue;
             if (e2->lF) efs.insert({ ce, e2->lF });
             if (e2->rF) efs.insert({ ce, e2->rF });
         }
-        for (Face* cf : cfs1) {
+        for (Face* cf : v1->GetAdjacentFaces()) {
             if (cf) efs.insert({ e2, cf });
         }
     }
@@ -323,10 +325,16 @@ static std::pair<int, std::set<std::pair<Edge*, Face*>>> BuildEfsAndWeight(const
         auto cfs1 = v1->GetAdjacentFaces();
         auto cfs2 = v2->GetAdjacentFaces();
         for (Edge* ce : v1->GetAdjacentEdges()) {
-            for (Face* cf : cfs2) efs.insert({ ce, cf });
+            if (!ce) continue;
+            for (Face* cf : cfs2) {
+                if (cf) efs.insert({ ce, cf });
+            }
         }
         for (Edge* ce : v2->GetAdjacentEdges()) {
-            for (Face* cf : cfs1) efs.insert({ ce, cf });
+            if (!ce) continue;
+            for (Face* cf : cfs1) {
+                if (cf) efs.insert({ ce, cf });
+            }
         }
     }
 
@@ -345,7 +353,7 @@ static std::pair<int, std::set<std::pair<Edge*, Face*>>> BuildEfsForFaceIntersec
     else {
         Vertex* v = static_cast<Vertex*>(info.topo);
         for (Edge* ce : v->GetAdjacentEdges()) {
-            efs.insert({ ce, faceOnOtherSide });
+            if (ce) efs.insert({ ce, faceOnOtherSide });
         }
     }
 
@@ -376,17 +384,17 @@ void MeshIntersector::NonCoPlanarFaceInt(Face* f1, Face* f2)
             if (!e) continue;
             auto pnts = e->getPnts();
             if (pnts.size() != 2) continue;
-            double t;
-            if (!GeomCalc::CalLineSegmentIntersection(intO, intDir, pnts[0], pnts[1], t))
+            double LineT, segT;
+            if (!GeomCalc::CalLineSegmentIntersection(intO, intDir, pnts[0], pnts[1], LineT, segT))
                 continue;
-            if (t < g_epsilon) {
-                out[t] = { e->v1, TopoType::VertexType };
+            if (segT < g_epsilon) {
+                out[LineT] = { e->v1, TopoType::VertexType };
             }
-            else if (t > 1 - g_epsilon) {
-                out[t] = { e->v2, TopoType::VertexType };
+            else if (segT > 1 - g_epsilon) {
+                out[LineT] = { e->v2, TopoType::VertexType };
             }
             else {
-                out[t] = { e, TopoType::EdgeType };
+                out[LineT] = { e, TopoType::EdgeType };
             }
         }
     };
@@ -442,16 +450,16 @@ void MeshIntersector::NonCoPlanarFaceInt(Face* f1, Face* f2)
         intPnts.push_back(intO + intDir * p1_end.param);
     }
     else if (p2_end.param < p1_end.param) {
-        auto [w, efs] = BuildEfsForFaceIntersect(p1_end, f2);
-        weights.push_back(w);
-        allEfs.push_back(efs);
-        intPnts.push_back(intO + intDir * p1_end.param);
-    }
-    else {
         auto [w, efs] = BuildEfsForFaceIntersect(p2_end, f1);
         weights.push_back(w);
         allEfs.push_back(efs);
         intPnts.push_back(intO + intDir * p2_end.param);
+    }
+    else {
+        auto [w, efs] = BuildEfsForFaceIntersect(p1_end, f2);
+        weights.push_back(w);
+        allEfs.push_back(efs);
+        intPnts.push_back(intO + intDir * p1_end.param);
     }
 
     // --- 存储结果 ---
@@ -467,11 +475,7 @@ void MeshIntersector::NonCoPlanarFaceInt(Face* f1, Face* f2)
             if (!m_ef2Int.count(ef))
                 continue;
             exist = true;
-            if (m_ef2Int.at(ef).size() >= 2)
-            {
-                assert("线面交点多于2个，错误！");
-                return;
-            }
+            assert(m_ef2Int.at(ef).size() < 2, "线面交点多于2个，错误！");
             double w = weights.at(intIdx);
             int otherIntIdx = *m_ef2Int.at(ef).begin();
             double otherIntW = m_weights.at(otherIntIdx);

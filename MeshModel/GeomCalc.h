@@ -16,7 +16,7 @@ struct MESHMODELDLL GeomCalc
     static bool CalPlanePlaneIntersection(Vec3d const& o1, Vec3d const& dir1, Vec3d const& o2, Vec3d const& dir2, Vec3d& intO, Vec3d& intDir);
 
     // 计算直线和线段交点
-    static bool CalLineSegmentIntersection(Vec3d const& o, Vec3d const& dir, Vec3d const& segS, Vec3d const& segE, double& param);
+    static bool CalLineSegmentIntersection(Vec3d const& o, Vec3d const& dir, Vec3d const& segS, Vec3d const& segE, double& lnP1/*直线参数*/, double& SegP2/*线段参数*/);
 
     // 三角形共面裁剪
     static bool TriRegionSplit(

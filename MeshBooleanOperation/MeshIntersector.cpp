@@ -115,6 +115,29 @@ bool MeshIntersector::Execute(TopoTriMesh& coPlanes)
     }
     for (auto const& [e, _] : m_edge2Ints) rmEdges.insert(e);
 
+    for (auto& f : rmFaces) {
+        if (f->topo == &m_mesh1) m_mesh1.RemoveFace(f);
+        else m_mesh2.RemoveFace(f);
+    }
+    for (auto& e : rmEdges) {
+        if (e->lF) {
+            if (e->lF->topo == &m_mesh1){
+                m_mesh1.RemoveEdge(e);
+            } else {
+                m_mesh2.RemoveEdge(e);
+            }
+        }
+        else {
+            if (e->rF->topo == &m_mesh1) {
+                m_mesh1.RemoveEdge(e);
+            }
+            else {
+                m_mesh2.RemoveEdge(e);
+            }
+        }
+    }
+
+
     return true;
 }
 

@@ -70,7 +70,12 @@ bool GeomCalc::IsPointOnSegment(const Vec3d& p, const Vec3d& a, const Vec3d& b, 
 }
 double GeomCalc::Point2PlaneDistatnce(Vec3d const& pnt, Vec3d const& o, Vec3d const& n)
 {
-    return std::fabs(n.Dot(Vec3d(pnt - o)));
+    return std::fabs(Point2PlaneSignDistance(pnt, o, n));
+}
+
+double GeomCalc::Point2PlaneSignDistance(Vec3d const& pnt, Vec3d const& o, Vec3d const& n)
+{
+    return n.Dot(Vec3d(pnt - o));
 }
 
 bool GeomCalc::CalPlanePlaneIntersection(

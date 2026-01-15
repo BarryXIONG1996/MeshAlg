@@ -11,6 +11,7 @@ struct MESHMODELDLL GeomCalc
 
     // 计算点到面的距离
     static double Point2PlaneDistatnce(Vec3d const& pnt, Vec3d const& o, Vec3d const& n);
+    static double Point2PlaneSignDistance(Vec3d const& pnt, Vec3d const& o, Vec3d const& n);
 
     // 计算面面交线
     static bool CalPlanePlaneIntersection(Vec3d const& o1, Vec3d const& dir1, Vec3d const& o2, Vec3d const& dir2, Vec3d& intO, Vec3d& intDir);

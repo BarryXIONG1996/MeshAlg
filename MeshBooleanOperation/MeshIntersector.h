@@ -21,7 +21,8 @@ private:
     TopoTriMesh m_coPlanes;
 
     std::map<std::pair<Edge*, Face*>, std::set<int>> m_ef2Int; // 边面对:交点
-    std::map<Face*, std::set<int>> m_face2IntSegs; // 面:交线
+    std::map<Face*, std::set<int>> m_face2Segs; // 面:交线
+    std::map<Edge*, std::set<int>> m_edge2Ints; // 边边内点
     std::vector<Vec3d> m_intersectPnts; // 交点
     std::vector<double> m_weights; // 交点权重
     std::vector<std::pair<int, int>> m_intSegs; // 交线

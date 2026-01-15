@@ -211,6 +211,21 @@ std::vector<Face*> Vertex::GetAdjacentFaces()
     return std::vector<Face*>(faces.begin(), faces.end());
 }
 
+std::vector<Vertex*> Face::getVertices()
+{
+    std::vector<Edge*> es = getEdges();
+    std::vector<Vertex*> pnts;
+    for (auto& e : es)
+    {
+        if (!e) continue;
+        if (e->lF == this)
+            pnts.push_back(e->v1);
+        else
+            pnts.push_back(e->v2);
+    }
+    return pnts;
+}
+
 std::vector<Edge*> Face::getEdges()
 {
     std::vector<Edge*> es(3);

@@ -94,10 +94,26 @@ bool MeshIntersector::Execute(TopoTriMesh& coPlanes)
 
     // 首先, 计算共面部分并移除
     IntersectProcess(std::bind(&MeshIntersector::CoPlanarFaceInt, this, std::placeholders::_1, std::placeholders::_2), true);
+    coPlanes = m_coPlanes;
+
     // 然后, 非共面部分进行求交
     IntersectProcess(std::bind(&MeshIntersector::NonCoPlanarFaceInt, this, std::placeholders::_1, std::placeholders::_2), false);
-
-    coPlanes = m_coPlanes;
+    
+    // 最后，基于求交结果编辑拓扑
+    std::set<Face*> rmFaces;
+    std::set<Edge*> rmEdges;
+    for (auto [f, _] : m_face2Segs)
+    {
+        rmFaces.insert(f);
+        std::vector<Edge*> es = f->getEdges();
+        for (auto* e : es) {
+            if (m_edge2Ints.count(e)) {
+                if (e->lF == f) rmFaces.insert(e->rF);
+                else rmFaces.insert(e->lF);
+            }
+        }
+    }
+    for (auto const& [e, _] : m_edge2Ints) rmEdges.insert(e);
 
     return true;
 }
@@ -267,7 +283,7 @@ void MeshIntersector::CoPlanarFaceInt(Face* f1, Face* f2)
         m_coPlanes.AddFace2TopoTriMesh(tri);
 }
 
-enum class TopoType { EdgeType, VertexType };
+enum TopoType { EdgeType, VertexType };
 
 struct IntersectionInfo {
     double param;
@@ -275,8 +291,22 @@ struct IntersectionInfo {
     TopoType type;
 };
 
+// 判断顶点和面的相对位置关系
+static void  VertexPlaneRelPos(Vertex* v, Vec3d const& o, Vec3d const& n) {
+    if (!v) return;
+    double signDist = GeomCalc::Point2PlaneSignDistance(v->pnt, o, n);
+    if (signDist > g_epsilon) v->posTag = 2; // 0=default, 1=in, 2=out, 3=on
+    else if (signDist < -g_epsilon) v->posTag = 1;
+    else v->posTag = 3;
+};
+
 // 根据两个交点信息构建 efs 和权重
-static std::pair<int, std::set<std::pair<Edge*, Face*>>> BuildEfsAndWeight(const IntersectionInfo& info1, const IntersectionInfo& info2, Face* otherFace = nullptr)
+static std::pair<int, std::set<std::pair<Edge*, Face*>>> BuildEfsAndWeight(
+    const IntersectionInfo& info1, 
+    const IntersectionInfo& info2, 
+    Vec3d const& o1, Vec3d const& n1,
+    Vec3d const& o2, Vec3d const& n2
+)
 {
     std::set<std::pair<Edge*, Face*>> efs;
     int weight = 0;
@@ -291,6 +321,8 @@ static std::pair<int, std::set<std::pair<Edge*, Face*>>> BuildEfsAndWeight(const
         if (e1->rF) efs.insert({ e2, e1->rF });
         if (e2->lF) efs.insert({ e1, e2->lF });
         if (e2->rF) efs.insert({ e1, e2->rF });
+        VertexPlaneRelPos(e1->v1, o2, n2);
+        VertexPlaneRelPos(e1->v2, o2, n2);
     }
     else if (info1.type == TopoType::EdgeType && info2.type == TopoType::VertexType) {
         weight = 3;
@@ -304,6 +336,9 @@ static std::pair<int, std::set<std::pair<Edge*, Face*>>> BuildEfsAndWeight(const
         for (Face* cf : v2->GetAdjacentFaces()) {
             if (cf) efs.insert({ e1, cf });
         }
+        v2->posTag = 3;
+        VertexPlaneRelPos(e1->v1, o2, n2);
+        VertexPlaneRelPos(e1->v2, o2, n2);
     }
     else if (info1.type == TopoType::VertexType && info2.type == TopoType::EdgeType) {
         weight = 3;
@@ -317,6 +352,9 @@ static std::pair<int, std::set<std::pair<Edge*, Face*>>> BuildEfsAndWeight(const
         for (Face* cf : v1->GetAdjacentFaces()) {
             if (cf) efs.insert({ e2, cf });
         }
+        v1->posTag = 3;
+        VertexPlaneRelPos(e2->v1, o1, n1);
+        VertexPlaneRelPos(e2->v2, o1, n1);
     }
     else { // Vertex-Vertex
         weight = 4;
@@ -336,25 +374,39 @@ static std::pair<int, std::set<std::pair<Edge*, Face*>>> BuildEfsAndWeight(const
                 if (cf) efs.insert({ ce, cf });
             }
         }
+        v1->posTag = v2->posTag = 3;
     }
 
     return { weight, efs };
 }
 
 // 处理“面”与拓扑元素相交的情况（即一个端点来自另一面内部）
-static std::pair<int, std::set<std::pair<Edge*, Face*>>> BuildEfsForFaceIntersect(const IntersectionInfo& info, Face* faceOnOtherSide)
+static std::pair<int, std::set<std::pair<Edge*, Face*>>> BuildEfsForFaceIntersect(
+    const IntersectionInfo& info, 
+    Face* faceOnOtherSide, 
+    Vec3d const& oOtherSide, 
+    Vec3d const& nOtherSide
+)
 {
     std::set<std::pair<Edge*, Face*>> efs;
     int weight = (info.type == TopoType::EdgeType) ? 1 : 2;
 
     if (info.type == TopoType::EdgeType) {
-        efs.insert({ static_cast<Edge*>(info.topo), faceOnOtherSide });
+        Edge* e = static_cast<Edge*>(info.topo);
+        efs.insert({ e, faceOnOtherSide });
+        VertexPlaneRelPos(e->v1, oOtherSide, nOtherSide);
+        VertexPlaneRelPos(e->v2, oOtherSide, nOtherSide);
     }
     else {
         Vertex* v = static_cast<Vertex*>(info.topo);
         for (Edge* ce : v->GetAdjacentEdges()) {
-            if (ce) efs.insert({ ce, faceOnOtherSide });
+            if (ce) {
+                efs.insert({ ce, faceOnOtherSide });
+                VertexPlaneRelPos(ce->v1, oOtherSide, nOtherSide);
+                VertexPlaneRelPos(ce->v2, oOtherSide, nOtherSide);
+            }
         }
+        v->posTag = 3;
     }
 
     return { weight, efs };
@@ -424,19 +476,19 @@ void MeshIntersector::NonCoPlanarFaceInt(Face* f1, Face* f2)
 
     // --- 处理起点 ---
     if (std::abs(p1_start.param - p2_start.param) <= g_epsilon) {
-        auto [w, efs] = BuildEfsAndWeight(p1_start, p2_start);
+        auto [w, efs] = BuildEfsAndWeight(p1_start, p2_start, o1, norm1, o2, norm2);
         weights.push_back(w);
         allEfs.push_back(efs);
         intPnts.push_back(intO + intDir * p1_start.param);
     }
     else if (p1_start.param < p2_start.param) {
-        auto [w, efs] = BuildEfsForFaceIntersect(p2_start, f1);
+        auto [w, efs] = BuildEfsForFaceIntersect(p2_start, f1, o1, norm1);
         weights.push_back(w);
         allEfs.push_back(efs);
         intPnts.push_back(intO + intDir * p2_start.param);
     }
     else {
-        auto [w, efs] = BuildEfsForFaceIntersect(p1_start, f2);
+        auto [w, efs] = BuildEfsForFaceIntersect(p1_start, f2, o2, norm2);
         weights.push_back(w);
         allEfs.push_back(efs);
         intPnts.push_back(intO + intDir * p1_start.param);
@@ -444,19 +496,19 @@ void MeshIntersector::NonCoPlanarFaceInt(Face* f1, Face* f2)
 
     // --- 处理终点 ---
     if (std::abs(p1_end.param - p2_end.param) < g_epsilon) {
-        auto [w, efs] = BuildEfsAndWeight(p1_end, p2_end);
+        auto [w, efs] = BuildEfsAndWeight(p1_end, p2_end, o1, norm1, o2, norm2);
         weights.push_back(w);
         allEfs.push_back(efs);
         intPnts.push_back(intO + intDir * p1_end.param);
     }
     else if (p2_end.param < p1_end.param) {
-        auto [w, efs] = BuildEfsForFaceIntersect(p2_end, f1);
+        auto [w, efs] = BuildEfsForFaceIntersect(p2_end, f1, o1, norm1);
         weights.push_back(w);
         allEfs.push_back(efs);
         intPnts.push_back(intO + intDir * p2_end.param);
     }
     else {
-        auto [w, efs] = BuildEfsForFaceIntersect(p1_end, f2);
+        auto [w, efs] = BuildEfsForFaceIntersect(p1_end, f2, o2, norm2);
         weights.push_back(w);
         allEfs.push_back(efs);
         intPnts.push_back(intO + intDir * p1_end.param);
@@ -466,7 +518,7 @@ void MeshIntersector::NonCoPlanarFaceInt(Face* f1, Face* f2)
     if (intPnts.size() != weights.size() || intPnts.size() != allEfs.size() || intPnts.size() != 2)
         return;
     std::vector<int> seg;
-    for (int intIdx = 0; intIdx < intPnts.size(); ++intIdx) 
+    for (int intIdx = 0; intIdx < intPnts.size(); ++intIdx) // 解决奇异性问题
     {
         auto const& efs = allEfs.at(intIdx);
         bool exist = false;
@@ -486,12 +538,12 @@ void MeshIntersector::NonCoPlanarFaceInt(Face* f1, Face* f2)
                 int segEndIdx = m_intersectPnts.size() - 1;
                 seg.push_back(segEndIdx);
             }
-            else
+            else // 取高权重点
             {
                 if (w > otherIntW)
                 {
                     m_intersectPnts.at(otherIntIdx) = intPnts.at(intIdx);
-                    m_weights.at(otherIntIdx) = weights.at(intIdx);
+                    m_weights.at(otherIntIdx) = w;
                 }
                 seg.push_back(otherIntIdx);
             }
@@ -518,6 +570,6 @@ void MeshIntersector::NonCoPlanarFaceInt(Face* f1, Face* f2)
     }
     m_intSegs.push_back({ seg.front(),seg.back() });
     int intSegIndex = m_intSegs.size() - 1;
-    m_face2IntSegs[f1].insert(intSegIndex);
-    m_face2IntSegs[f2].insert(intSegIndex);
+    m_face2Segs[f1].insert(intSegIndex);
+    m_face2Segs[f2].insert(intSegIndex);
 }

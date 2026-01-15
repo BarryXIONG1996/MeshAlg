@@ -19,4 +19,3 @@ private:
     TopoTriMesh* m_obj/*目标集*/, *m_sub/*工具集*/;
     BooleanType m_opType;   
 };
-

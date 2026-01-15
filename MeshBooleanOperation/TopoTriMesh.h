@@ -24,10 +24,11 @@ struct Edge {
     std::vector<Vec3d> getPnts(bool left = true);
 };
 
+struct TopoTriMesh;
 struct Face {
-    TopoTriMesh* topo;
     Edge* e;        // »Œ“ª±ﬂ
     BndBox3d bbox;
+    TopoTriMesh* topo;
 
     std::vector<Vertex*> getVertices();
     std::vector<Edge*> getEdges();

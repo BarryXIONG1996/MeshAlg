@@ -118,7 +118,7 @@ bool Vec3d::Equal(const Vec3d& v) const
 bool Vec3dCmp::operator()(const Vec3d& a, const Vec3d& b) const {
     if (fabs(a.x - b.x) > g_epsilon) return a.x < b.x;
     if (fabs(a.y - b.y) > g_epsilon) return a.y < b.y;
-    return a.z < b.z;
+    return a.z < b.z - g_epsilon;
 }
 
 BndBox3d BndBox3d::Intersect(BndBox3d const& bnd) {

@@ -38,4 +38,10 @@ struct MESHMODELDLL GeomCalc
 
     // 多边形的三角化
     static std::vector<std::vector<Vec3d>> Triangulate(std::vector<Vec3d> const& poly);
+
+    // 包含限制边的三角化
+    static std::vector<std::vector<Vec3d>> TriangulateWithConstraints(
+        const std::vector<Vec3d>& outerBoundary,
+        const std::vector<std::vector<Vec3d>>& intersectionPolylines
+    );
 };

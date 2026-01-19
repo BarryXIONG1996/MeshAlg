@@ -54,10 +54,95 @@ MeshIntersector::MeshIntersector(TopoTriMesh& m1, TopoTriMesh& m2)
 
 }
 
+// 判断点 p 是否在 Edge e 上（不包括端点）
+static bool IsPointOnEdgeInterior(const Vec3d& p, Edge* e)
+{
+    if (!e || !e->v1 || !e->v2) return false;
+
+    const Vec3d& a = e->v1->pnt;
+    const Vec3d& b = e->v2->pnt;
+
+    const double eps = g_epsilon;
+
+    // Step 1: 检查点是否与端点重合（排除端点）
+    if ((p - a).Length() < eps || (p - b).Length() < eps) {
+        return false; // 在端点上，不算“内部”
+    }
+
+    // Step 2: 检查三点是否共线：(b - a) × (p - a) ≈ 0
+    Vec3d ab = b - a;
+    Vec3d ap = p - a;
+    Vec3d cross = ab.Cross(ap);
+    if (cross.Length() > eps * ab.Length()) {
+        return false; // 不共线
+    }
+
+    // Step 3: 检查点是否在线段内部（开区间）
+    double len2_ab = ab.Dot(ab);
+    if (len2_ab < eps) {
+        return false; // 边退化为点（不应发生）
+    }
+
+    // 计算投影参数 t ∈ [0,1]：p = a + t * ab
+    double t = ap.Dot(ab) / len2_ab;
+
+    // 开区间：0 < t < 1
+    return (t > eps && t < 1.0 - eps);
+}
+
+// 按线段顺序输出边上点（去重 + 排序）
+static std::vector<Vec3d> SortPointsOnEdge(
+    const Vec3d& A,
+    const Vec3d& B,
+    const std::vector<Vec3d>& pointsOnEdge)
+{
+    std::vector<Vec3d> result;
+    if (pointsOnEdge.empty()) return result;
+
+    Vec3d AB = B - A;
+    double len2_AB = AB.Dot(AB);
+
+    // 处理退化线段（A == B）
+    if (len2_AB < g_epsilon * g_epsilon) {
+        return { A }; // 所有点都重合于 A
+    }
+
+    // 计算每个点的 t 参数
+    struct PointWithT {
+        Vec3d p;
+        double t;
+        bool operator<(const PointWithT& other) const {
+            return t < other.t;
+        }
+    };
+    std::vector<PointWithT> ptsWithT;
+    ptsWithT.reserve(pointsOnEdge.size());
+    for (const auto& P : pointsOnEdge) {
+        Vec3d AP = P - A;
+        double t = AP.Dot(AB) / len2_AB;
+        // 可选：钳制 t 到 [0,1]（若点略微超出）
+        // t = std::max(0.0, std::min(1.0, t));
+        ptsWithT.push_back({ P, t });
+    }
+
+    // 按 t 排序
+    std::sort(ptsWithT.begin(), ptsWithT.end());
+
+    // 去重（基于 t 的 epsilon 比较）
+    result.push_back(ptsWithT.front().p);
+    for (size_t i = 1; i < ptsWithT.size(); ++i) {
+        if (ptsWithT[i].t - ptsWithT[i - 1].t > g_epsilon) {
+            result.push_back(ptsWithT[i].p);
+        }
+    }
+
+    return result;
+}
+
 bool MeshIntersector::Execute(TopoTriMesh& coPlanes)
 {
     auto IntersectProcess = [&](std::function<void(Face*, Face*)> intersectFunc, bool coPlanar) {
-        // 1、构建空间搜索树
+    // 1、构建空间搜索树
     // 计算工具集和目标集的包围盒
         BndBox3d boundingBoxO = m_mesh1.GetBndBox();
         BndBox3d boundingBoxT = m_mesh2.GetBndBox();
@@ -102,8 +187,21 @@ bool MeshIntersector::Execute(TopoTriMesh& coPlanes)
     // 最后，基于求交结果编辑拓扑
     std::set<Face*> rmFaces;
     std::set<Edge*> rmEdges;
-    for (auto [f, _] : m_face2Segs)
-    {
+    for (auto const& [f, segs] : m_face2Segs) {
+        auto const& es = f->getEdges();
+        for (auto seg : segs) {
+            int segS = m_intSegs.at(seg).first;
+            int segE = m_intSegs.at(seg).second;
+            for (auto const& e : es) {
+                if (IsPointOnEdgeInterior(m_intersectPnts.at(segS), e)) 
+                    m_edge2Ints[e].insert(segS);
+                if (IsPointOnEdgeInterior(m_intersectPnts.at(segE), e)) 
+                    m_edge2Ints[e].insert(segE);
+            }
+        }
+    }
+
+    for (auto const& [f, _] : m_face2Segs) {
         rmFaces.insert(f);
         std::vector<Edge*> es = f->getEdges();
         for (auto* e : es) {
@@ -115,9 +213,41 @@ bool MeshIntersector::Execute(TopoTriMesh& coPlanes)
     }
     for (auto const& [e, _] : m_edge2Ints) rmEdges.insert(e);
 
+    std::vector<std::vector<Vec3d>> reTris1, reTris2;
+    for (auto const& f : rmFaces) {
+        auto const& es = f->getEdges();
+        std::vector<Vec3d> boundary;
+        for (auto const& e : es) {
+            Vec3d start,end;
+            if (e->lF == f)
+                start = e->v1->pnt, end = e->v2->pnt;
+            else
+                start = e->v2->pnt, end = e->v1->pnt;
+            std::vector<Vec3d> interPnts;
+            if (m_edge2Ints.count(e))
+                std::for_each(m_edge2Ints.at(e).begin(), m_edge2Ints.at(e).end(), [&](int idx) { interPnts.push_back(m_intersectPnts.at(idx)); });
+            boundary.push_back(start);
+            boundary.insert(boundary.end(), interPnts.begin(), interPnts.end());
+            boundary.push_back(end); // 首尾点重复添加，之后会去重
+        }
+        std::vector<std::vector<Vec3d>> intSegs;
+        for (auto const& seg : m_face2Segs.at(f))
+        {
+            Vec3d s = m_intersectPnts.at(m_intSegs.at(seg).first);
+            Vec3d e = m_intersectPnts.at(m_intSegs.at(seg).second);
+            intSegs.push_back({ s,e });
+        }
+        std::vector<std::vector<Vec3d>> tris = GeomCalc::TriangulateWithConstraints(boundary, intSegs);
+        if (f->topo == &m_mesh1)
+            reTris1.insert(reTris1.end(), tris.begin(), tris.end());
+        if (f->topo == &m_mesh2)
+            reTris2.insert(reTris2.end(), tris.begin(), tris.end());
+    }
+
     for (auto& f : rmFaces) {
         if (f->topo == &m_mesh1) m_mesh1.RemoveFace(f);
         else m_mesh2.RemoveFace(f);
+        if (f) delete f;
     }
     for (auto& e : rmEdges) {
         if (e->lF) {
@@ -135,8 +265,11 @@ bool MeshIntersector::Execute(TopoTriMesh& coPlanes)
                 m_mesh2.RemoveEdge(e);
             }
         }
+        if (e) delete e;
     }
 
+    for (auto& tri : reTris1) m_mesh1.AddFace2TopoTriMesh(tri);
+    for (auto& tri : reTris2) m_mesh2.AddFace2TopoTriMesh(tri);
 
     return true;
 }
@@ -346,6 +479,8 @@ static std::pair<int, std::set<std::pair<Edge*, Face*>>> BuildEfsAndWeight(
         if (e2->rF) efs.insert({ e1, e2->rF });
         VertexPlaneRelPos(e1->v1, o2, n2);
         VertexPlaneRelPos(e1->v2, o2, n2);
+        VertexPlaneRelPos(e2->v1, o1, n1);
+        VertexPlaneRelPos(e2->v2, o1, n1);
     }
     else if (info1.type == TopoType::EdgeType && info2.type == TopoType::VertexType) {
         weight = 3;
@@ -425,8 +560,8 @@ static std::pair<int, std::set<std::pair<Edge*, Face*>>> BuildEfsForFaceIntersec
         for (Edge* ce : v->GetAdjacentEdges()) {
             if (ce) {
                 efs.insert({ ce, faceOnOtherSide });
-                VertexPlaneRelPos(ce->v1, oOtherSide, nOtherSide);
-                VertexPlaneRelPos(ce->v2, oOtherSide, nOtherSide);
+                /*VertexPlaneRelPos(ce->v1, oOtherSide, nOtherSide);
+                VertexPlaneRelPos(ce->v2, oOtherSide, nOtherSide);*/
             }
         }
         v->posTag = 3;

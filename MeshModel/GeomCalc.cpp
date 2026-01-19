@@ -298,14 +298,7 @@ std::vector<std::vector<Vec3d>> GeomCalc::Triangulate(const std::vector<Vec3d>& 
     if (pnts.size() < 3) return {};
 
     // === 2. 计算法向量（Newell）===
-    Vec3d n{ 0, 0, 0 };
-    for (size_t i = 0; i < pnts.size(); ++i) {
-        const auto& a = pnts[i];
-        const auto& b = pnts[(i + 1) % pnts.size()];
-        n.x += (a.y - b.y) * (a.z + b.z);
-        n.y += (a.z - b.z) * (a.x + b.x);
-        n.z += (a.x - b.x) * (a.y + b.y);
-    }
+    Vec3d n = CompuateNormal(pnts);
     if (n.LengthSq() < g_epsilon * g_epsilon) return {}; // 共线
 
     // === 3. 选择投影平面 ===
@@ -352,6 +345,114 @@ std::vector<std::vector<Vec3d>> GeomCalc::Triangulate(const std::vector<Vec3d>& 
             pnts[t.vertices[0]],
             pnts[t.vertices[1]],
             pnts[t.vertices[2]]
+            });
+    }
+
+    return result;
+}
+
+// === 主函数：带约束的三角剖分 ===
+std::vector<std::vector<Vec3d>> GeomCalc::TriangulateWithConstraints(
+    const std::vector<Vec3d>& outerBoundary,
+    const std::vector<std::vector<Vec3d>>& intersectionPolylines)
+{
+    if (outerBoundary.size() < 3) {
+        return {};
+    }
+
+    // --- Step 1: 计算平面参数（使用外边界）---
+    // 取重心为 origin
+    Vec3d origin{ 0, 0, 0 };
+    for (const auto& p : outerBoundary) {
+        origin = origin + p;
+    }
+    origin = origin * (1.0 / static_cast<double>(outerBoundary.size()));
+
+    // 计算法向
+    Vec3d normal = CompuateNormal(outerBoundary);
+
+    // 构建局部正交基
+    Vec3d arbitrary = (std::abs(normal.x) < 0.9) ? Vec3d{ 1, 0, 0 } : Vec3d{ 0, 1, 0 };
+    Vec3d x_axis = normal.Cross(arbitrary).Normalization();
+    Vec3d y_axis = normal.Cross(x_axis); // 自动单位化
+
+    // --- Step 2: 收集所有点并去重 ---
+    std::map<Vec3d, size_t, Vec3dCmp> pointToIndex;
+
+    std::vector<Vec3d> uniquePoints;
+    auto addPoint = [&](const Vec3d& p) -> size_t {
+        auto it = pointToIndex.find(p);
+        if (it != pointToIndex.end()) {
+            return it->second;
+        }
+        size_t idx = uniquePoints.size();
+        uniquePoints.push_back(p);
+        pointToIndex[p] = idx;
+        return idx;
+        };
+
+    // 添加外边界点
+    for (const auto& p : outerBoundary) {
+        addPoint(p);
+    }
+
+    // 添加交线点
+    for (const auto& poly : intersectionPolylines) {
+        for (const auto& p : poly) {
+            addPoint(p);
+        }
+    }
+
+    // --- Step 3: 构建 CDT 输入 ---
+    std::vector<CDT::V2d<double>> cdtVertices;
+    cdtVertices.reserve(uniquePoints.size());
+    for (const auto& p : uniquePoints) {
+        // 投影到 XY？不！我们应使用局部 2D 坐标
+        Vec3d rel = p - origin;
+        double u = rel.Dot(x_axis);
+        double v = rel.Dot(y_axis);
+        cdtVertices.emplace_back(u, v);
+    }
+
+    // 构建约束边
+    std::vector<CDT::Edge> constraints;
+
+    // 外边界（闭环）
+    for (size_t i = 0; i < outerBoundary.size(); ++i) {
+        size_t j = (i + 1) % outerBoundary.size();
+        CDT::VertInd vi = static_cast<CDT::VertInd>(pointToIndex.at(outerBoundary[i]));
+        CDT::VertInd vj = static_cast<CDT::VertInd>(pointToIndex.at(outerBoundary[j]));
+        constraints.emplace_back(vi, vj);
+    }
+
+    // 交线（开链）
+    for (const auto& poly : intersectionPolylines) {
+        for (size_t i = 0; i + 1 < poly.size(); ++i) {
+            CDT::VertInd vi = static_cast<CDT::VertInd>(pointToIndex.at(poly[i]));
+            CDT::VertInd vj = static_cast<CDT::VertInd>(pointToIndex.at(poly[i + 1]));
+            constraints.emplace_back(vi, vj);
+        }
+    }
+
+    // --- Step 4: 执行 CDT ---
+    CDT::Triangulation<double> tri;
+    tri.insertVertices(cdtVertices);
+    tri.insertEdges(constraints);
+    tri.eraseOuterTrianglesAndHoles(); // 移除外部超三角形
+
+    // --- Step 5: 提取结果（转回 3D）---
+    std::vector<std::vector<Vec3d>> result;
+    for (const auto& t : tri.triangles) {
+        if (t.vertices[0] == CDT::noVertex ||
+            t.vertices[1] == CDT::noVertex ||
+            t.vertices[2] == CDT::noVertex) {
+            continue;
+        }
+
+        result.push_back({
+            uniquePoints[t.vertices[0]],
+            uniquePoints[t.vertices[1]],
+            uniquePoints[t.vertices[2]]
             });
     }
 

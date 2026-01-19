@@ -46,5 +46,6 @@ struct TopoTriMesh{
     void RemoveFace(Face* f);
     void RemoveEdge(Edge* e); // 移除边之前，要先移除两侧面
     void ReleaseMem();
+    void Build(TriMesh const& triMesh);
 };
 

@@ -121,7 +121,7 @@ bool Vec3dCmp::operator()(const Vec3d& a, const Vec3d& b) const {
     return a.z < b.z - g_epsilon;
 }
 
-BndBox3d BndBox3d::Intersect(BndBox3d const& bnd) {
+BndBox3d BndBox3d::Intersect(BndBox3d const& bnd) const {
     BndBox3d res;
     res.lowerBnd.x = std::max(lowerBnd.x, bnd.lowerBnd.x);
     res.lowerBnd.y = std::max(lowerBnd.y, bnd.lowerBnd.y);
@@ -132,7 +132,7 @@ BndBox3d BndBox3d::Intersect(BndBox3d const& bnd) {
     return res;
 }
 
-bool BndBox3d::IsOut(BndBox3d bnd) {
+bool BndBox3d::IsOut(BndBox3d bnd) const {
     // 判断两个包围盒是否不相交(精度g_epsilon)
     return (upperBnd.x < bnd.lowerBnd.x - g_epsilon || lowerBnd.x > bnd.upperBnd.x + g_epsilon ||
         upperBnd.y < bnd.lowerBnd.y - g_epsilon || lowerBnd.y > bnd.upperBnd.y + g_epsilon ||
@@ -146,4 +146,12 @@ void BndBox3d::Add(const Vec3d& p) {
     if (p.x > upperBnd.x) upperBnd.x = p.x;
     if (p.y > upperBnd.y) upperBnd.y = p.y;
     if (p.z > upperBnd.z) upperBnd.z = p.z;
+}
+
+Vec3d BndBox3d::Center() const {
+    return {
+        (lowerBnd.x + upperBnd.x) / 2,
+        (lowerBnd.y + upperBnd.y) / 2,
+        (lowerBnd.z + upperBnd.z) / 2,
+    };
 }

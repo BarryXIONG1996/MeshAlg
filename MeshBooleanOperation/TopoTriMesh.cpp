@@ -156,19 +156,144 @@ void TopoTriMesh::ReleaseMem()
         delete f; 
         f = nullptr;
     }
+    fs.clear();
 
     for (auto& e : es)
     {
         delete e;
         e = nullptr;
     }
+    es.clear();
 
     for (auto& v : vs)
     {
         delete v;
         v = nullptr;
     }
+    es.clear();
+
     p2V.clear();
+}
+
+void TopoTriMesh::Build(const TriMesh& triMesh) {
+    ReleaseMem();
+
+    if (triMesh.indices.empty() || triMesh.points.empty()) {
+        return;
+    }
+
+    // --- Step 1: 构建去重顶点 ---
+    std::map<Vertex*, int> v2Idx;           // Vertex* -> index in vs
+    std::map<int, int> pIdx2vIdx;           // original point index -> vs index
+
+    for (int idx = 0; idx < static_cast<int>(triMesh.points.size()); ++idx) {
+        const Vec3d& pnt = triMesh.points[idx];
+        auto it = p2V.find(pnt);
+        if (it == p2V.end()) { // 新顶点
+            Vertex* v = new Vertex{ pnt };
+            int vidx = static_cast<int>(vs.size());
+            vs.push_back(v);
+            p2V[pnt] = v;
+            v2Idx[v] = vidx;
+            pIdx2vIdx[idx] = vidx;
+        }
+        else { // 已存在
+            Vertex* v = it->second;
+            int vidx = v2Idx[v];
+            pIdx2vIdx[idx] = vidx;
+        }
+    }
+
+    // --- Step 2: 构建面和边 ---
+    std::map<std::pair<int, int>, Edge*> cEs; // (min, max) -> Edge*
+
+    for (int idx = 0; idx + 3 <= static_cast<int>(triMesh.indices.size()); idx += 4) {
+        // 跳过无效三角形（如索引为0）
+        if (triMesh.indices[idx] == 0 ||
+            triMesh.indices[idx + 1] == 0 ||
+            triMesh.indices[idx + 2] == 0) {
+            continue;
+        }
+
+        Face* f = new Face;
+        fs.push_back(f);
+
+        // 1-based → 0-based point index → vs index
+        int i0 = pIdx2vIdx.at(triMesh.indices[idx] - 1);
+        int i1 = pIdx2vIdx.at(triMesh.indices[idx + 1] - 1);
+        int i2 = pIdx2vIdx.at(triMesh.indices[idx + 2] - 1);
+
+        // 构造边 key
+        std::pair<int, int> e1_key = { std::min(i0, i1), std::max(i0, i1) };
+        std::pair<int, int> e2_key = { std::min(i1, i2), std::max(i1, i2) };
+        std::pair<int, int> e3_key = { std::min(i2, i0), std::max(i2, i0) };
+
+        Edge* tes[3];
+        bool isENew[3] = { false, false, false };
+
+        // --- 处理 e0: (i0, i1) ---
+        auto it1 = cEs.find(e1_key);
+        if (it1 == cEs.end()) {
+            tes[0] = new Edge{ vs[i0], vs[i1], f };
+            isENew[0] = true;
+            es.push_back(tes[0]);
+            cEs[e1_key] = tes[0];
+            if (!vs[i1]->e) vs[i1]->e = tes[0];
+        }
+        else {
+            tes[0] = it1->second;
+            tes[0]->rF = f; // 第二个邻接面
+        }
+        f->e = tes[0];
+
+        // --- 处理 e1: (i1, i2) ---
+        auto it2 = cEs.find(e2_key);
+        if (it2 == cEs.end()) {
+            tes[1] = new Edge{ vs[i1], vs[i2], f };
+            isENew[1] = true;
+            es.push_back(tes[1]);
+            cEs[e2_key] = tes[1];
+            if (!vs[i2]->e) vs[i2]->e = tes[1];
+        }
+        else {
+            tes[1] = it2->second;
+            tes[1]->rF = f;
+        }
+
+        // --- 处理 e2: (i2, i0) ---
+        auto it3 = cEs.find(e3_key);
+        if (it3 == cEs.end()) {
+            tes[2] = new Edge{ vs[i2], vs[i0], f };
+            isENew[2] = true;
+            es.push_back(tes[2]);
+            cEs[e3_key] = tes[2];
+            if (!vs[i0]->e) vs[i0]->e = tes[2];
+        }
+        else {
+            tes[2] = it3->second;
+            tes[2]->rF = f;
+        }
+
+        // --- 设置边的邻接边（绕面顺序）---
+        // 对于新边：设置 lPE (left previous edge), lSE (left next edge)
+        // 对于已有边：设置 rPE (right previous), rSE (right next)
+        for (int i = 0; i < 3; ++i) {
+            Edge* cur = tes[i];
+            Edge* prev = tes[(i - 1 + 3) % 3]; // 前一条边（逆时针）
+            Edge* next = tes[(i + 1) % 3];     // 后一条边
+
+            if (isENew[i]) {
+                // 当前面在边的 "左侧"
+                cur->lPE = prev;
+                cur->lSE = next;
+            }
+            else {
+                // 当前面在边的 "右侧"
+                cur->rPE = prev;
+                cur->rSE = next;
+            }
+        }
+    }
 }
 
 std::vector<Edge*> Vertex::GetAdjacentEdges()

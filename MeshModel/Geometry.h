@@ -50,8 +50,15 @@ struct MESHMODELDLL Vec3dCmp {
 struct MESHMODELDLL BndBox3d
 {
     Vec3d lowerBnd, upperBnd;
-    BndBox3d Intersect(BndBox3d const& bnd);
-    bool IsOut(BndBox3d bnd);
+    BndBox3d Intersect(BndBox3d const& bnd) const;
+    bool IsOut(BndBox3d bnd) const;
     void Add(const Vec3d& p);
+    Vec3d Center() const;
+};
+
+struct MESHMODELDLL TriMesh
+{
+    std::vector<int> indices;
+    std::vector<Vec3d> points;
 };
 

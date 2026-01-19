@@ -17,15 +17,9 @@
 
 extern const double g_epsilon;
 
-class SpatialAccelerator {
-public:
-    virtual void Build(std::vector<Face*>& faces) = 0;
-    virtual std::vector<Face*> Query(const BndBox3d& box) = 0;
-};
-
 class RTreeAccelerator : public SpatialAccelerator {
-    virtual void Build(std::vector<Face*>& faces) override
-    {
+public:
+    virtual void Build(std::vector<Face*> const& faces) override {
         // 构建R树
         for (Face* face : faces) {
             // 将每个面片的包围盒插入到R树中
@@ -33,8 +27,7 @@ class RTreeAccelerator : public SpatialAccelerator {
         }
     }
 
-    virtual std::vector<Face*> Query(const BndBox3d& box) override
-    {
+    virtual std::vector<Face*> Query(const BndBox3d& box) override {
         // 查询R树
         std::vector<Face*> result;
         m_rtree.Search((double*)&box.lowerBnd, (double*)&box.upperBnd,
@@ -45,13 +38,22 @@ class RTreeAccelerator : public SpatialAccelerator {
         return result;
     }
 
+    virtual void Clear() override {
+        m_rtree.RemoveAll();
+    }
+
+    virtual void Remove(Face* f) override {
+        m_rtree.Remove((double*)&f->bbox.lowerBnd, (double*)&f->bbox.upperBnd, f);
+    }
+
+private:
     RTree<Face*, double, 3> m_rtree;
 };
 
 MeshIntersector::MeshIntersector(TopoTriMesh& m1, TopoTriMesh& m2)
     : m_mesh1(m1), m_mesh2(m2)
 {
-
+    m_accelerator = std::make_shared<RTreeAccelerator>();
 }
 
 // 判断点 p 是否在 Edge e 上（不包括端点）
@@ -158,18 +160,18 @@ bool MeshIntersector::Execute(TopoTriMesh& coPlanes)
             }
         }
         // 将相交的面片添加到空间搜索树
-        std::shared_ptr<SpatialAccelerator> accelerator = std::make_shared<RTreeAccelerator>();
-        accelerator->Build(intersectingFaces);
+        m_accelerator->Clear();
+        m_accelerator->Build(intersectingFaces);
 
         // 2、相交测试
-        std::vector<Face*>const& facesO = m_mesh1.fs;
-        for (Face* face : facesO)
+        for (int idx = 0; idx < m_mesh1.fs.size(); ++idx)
         {
+            Face* face = m_mesh1.fs.at(idx);
             // 过滤掉与包围盒不相交的三角面片
             if (face->bbox.IsOut(intBox))
                 continue;
             // 查询空间搜索树，获取可能相交的面片
-            std::vector<Face*> candidateFaces = accelerator->Query(face->bbox);
+            std::vector<Face*> candidateFaces = m_accelerator->Query(face->bbox);
             for (Face* candidateFace : candidateFaces) {
                 // 3、面片之间的相交计算
                 FaceFaceInt(face, candidateFace, intersectFunc, coPlanar);
@@ -398,7 +400,6 @@ void MeshIntersector::CoPlanarFaceInt(Face* f1, Face* f2)
     std::vector<std::vector<Vec3d>> poly1s = std::move(tri1Out2);
     std::vector<std::vector<Vec3d>> poly2s = std::move(tri2Out1);
 
-    m_mesh1.RemoveFace(f1);
     for (auto& e : e2Pts1) {
         Face* cF = (e.first->lF == f1) ? e.first->rF : e.first->lF;
         if (cF) {
@@ -406,10 +407,11 @@ void MeshIntersector::CoPlanarFaceInt(Face* f1, Face* f2)
             poly1s.push_back(std::move(newPoly));
         }
         m_mesh1.RemoveFace(cF);
-        m_mesh1.RemoveEdge(e.first);
     }
+    m_mesh1.RemoveFace(f1);
+    for (auto& e : e2Pts1) m_mesh1.RemoveEdge(e.first);
 
-    m_mesh2.RemoveFace(f2);
+
     for (auto& e : e2Pts2) {
         Face* cF = (e.first->lF == f2) ? e.first->rF : e.first->lF;
         if (cF) {
@@ -417,8 +419,11 @@ void MeshIntersector::CoPlanarFaceInt(Face* f1, Face* f2)
             poly2s.push_back(std::move(newPoly));
         }
         m_mesh2.RemoveFace(cF);
-        m_mesh2.RemoveEdge(e.first);
+        m_accelerator->Remove(cF);
     }
+    m_mesh2.RemoveFace(f2);
+    m_accelerator->Remove(f2);
+    for (auto& e : e2Pts2) m_mesh2.RemoveEdge(e.first);
 
     for (auto const& poly : poly1s)
     {
@@ -431,7 +436,10 @@ void MeshIntersector::CoPlanarFaceInt(Face* f1, Face* f2)
     {
         std::vector<std::vector<Vec3d>> tris = GeomCalc::Triangulate(poly);
         for (auto const& tri : tris)
-            m_mesh2.AddFace2TopoTriMesh(tri);
+        {
+            Face* newF = m_mesh2.AddFace2TopoTriMesh(tri);
+            m_accelerator->Build({newF});
+        }
     }
 
     std::vector<std::vector<Vec3d>> tris = GeomCalc::Triangulate(tri12Int);

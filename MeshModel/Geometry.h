@@ -49,6 +49,7 @@ struct MESHMODELDLL Vec3dCmp {
 
 struct MESHMODELDLL BndBox3d
 {
+    BndBox3d();
     Vec3d lowerBnd, upperBnd;
     BndBox3d Intersect(BndBox3d const& bnd) const;
     bool IsOut(BndBox3d bnd) const;

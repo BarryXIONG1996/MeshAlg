@@ -1,6 +1,15 @@
 #pragma once
 #include "TopoTriMesh.h"
 #include <functional>
+#include <memory>
+
+class SpatialAccelerator {
+public:
+    virtual void Build(std::vector<Face*> const& faces) = 0;
+    virtual std::vector<Face*> Query(const BndBox3d& box) = 0;
+    virtual void Clear() = 0;
+    virtual void Remove(Face* face) = 0;
+};
 
 class MeshIntersector
 {
@@ -26,4 +35,5 @@ private:
     std::vector<Vec3d> m_intersectPnts; // 交点
     std::vector<double> m_weights; // 交点权重
     std::vector<std::pair<int, int>> m_intSegs; // 交线
+    std::shared_ptr<SpatialAccelerator> m_accelerator;
 };

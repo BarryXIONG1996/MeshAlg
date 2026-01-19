@@ -121,6 +121,21 @@ bool Vec3dCmp::operator()(const Vec3d& a, const Vec3d& b) const {
     return a.z < b.z - g_epsilon;
 }
 
+BndBox3d::BndBox3d()
+{
+    lowerBnd = { 
+        std::numeric_limits<double>::max(), 
+        std::numeric_limits<double>::max(), 
+        std::numeric_limits<double>::max() 
+    };
+
+    upperBnd = {
+        std::numeric_limits<double>::lowest(),
+        std::numeric_limits<double>::lowest(),
+        std::numeric_limits<double>::lowest()
+    };
+}
+
 BndBox3d BndBox3d::Intersect(BndBox3d const& bnd) const {
     BndBox3d res;
     res.lowerBnd.x = std::max(lowerBnd.x, bnd.lowerBnd.x);

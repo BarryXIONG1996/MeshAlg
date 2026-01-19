@@ -42,7 +42,7 @@ struct TopoTriMesh{
     std::map<Vec3d, Vertex*, Vec3dCmp> p2V; // 几何去重（带epsilon）
 
     BndBox3d GetBndBox();
-    void AddFace2TopoTriMesh(std::vector<Vec3d>const& pnts);
+    Face* AddFace2TopoTriMesh(std::vector<Vec3d>const& pnts);
     void RemoveFace(Face* f);
     void RemoveEdge(Edge* e); // 移除边之前，要先移除两侧面
     void ReleaseMem();

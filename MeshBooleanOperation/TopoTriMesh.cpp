@@ -13,7 +13,7 @@ BndBox3d TopoTriMesh::GetBndBox() {
     return bbox;
 }
 
-void TopoTriMesh::AddFace2TopoTriMesh(std::vector<Vec3d> const& pnts)
+Face* TopoTriMesh::AddFace2TopoTriMesh(std::vector<Vec3d> const& pnts)
 {
     // 1. 创建或获取顶点 v1, v2, v3
     Vertex* vertices[3] = { nullptr, nullptr, nullptr };
@@ -31,7 +31,7 @@ void TopoTriMesh::AddFace2TopoTriMesh(std::vector<Vec3d> const& pnts)
     }
 
     // 如果无法获得3个顶点，返回
-    if (!vertices[0] || !vertices[1] || !vertices[2]) return;
+    if (!vertices[0] || !vertices[1] || !vertices[2]) return nullptr;
 
     // 2. 创建或获取边 e1, e2, e3
     auto makeEdgeKey = [](Vertex* a, Vertex* b) -> std::pair<Vertex*, Vertex*> {
@@ -65,6 +65,7 @@ void TopoTriMesh::AddFace2TopoTriMesh(std::vector<Vec3d> const& pnts)
     // 3. 设置边的拓扑关系（根据图片算法）
     Face* newF = new Face{ edges[0] };
     fs.push_back(newF);
+    for (auto const& pnt : pnts) newF->bbox.Add(pnt);
 
     // 设置每条边的 lF, rF, lPE, rPE
     for (int i = 0; i < 3; ++i) {
@@ -89,6 +90,8 @@ void TopoTriMesh::AddFace2TopoTriMesh(std::vector<Vec3d> const& pnts)
             vertices[i]->e = edges[(i - 1 + 3) % 3];
         }
     }
+
+    return newF;
 }
 
 void TopoTriMesh::RemoveFace(Face* f)
@@ -217,11 +220,16 @@ void TopoTriMesh::Build(const TriMesh& triMesh) {
 
         Face* f = new Face;
         fs.push_back(f);
+        f->topo = this;
 
         // 1-based → 0-based point index → vs index
         int i0 = pIdx2vIdx.at(triMesh.indices[idx] - 1);
         int i1 = pIdx2vIdx.at(triMesh.indices[idx + 1] - 1);
         int i2 = pIdx2vIdx.at(triMesh.indices[idx + 2] - 1);
+
+        f->bbox.Add(vs.at(i0)->pnt);
+        f->bbox.Add(vs.at(i1)->pnt);
+        f->bbox.Add(vs.at(i2)->pnt);
 
         // 构造边 key
         std::pair<int, int> e1_key = { std::min(i0, i1), std::max(i0, i1) };

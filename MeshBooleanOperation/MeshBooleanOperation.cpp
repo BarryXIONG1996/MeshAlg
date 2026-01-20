@@ -10,6 +10,8 @@
 #include <osg/Group>
 #include <osgViewer/Viewer>
 #include <osgGA/TrackballManipulator>
+#include <osg/LineWidth>
+#include <osg/Material>
 
 // Helper function to add a cube centered at (cx, cy, cz) with side length 'side'
 void AddCube(TriMesh& mesh, double cx, double cy, double cz, double side) {
@@ -85,12 +87,10 @@ osg::ref_ptr<osg::Geometry> createGeometryFromTriMesh(const TriMesh& mesh)
         }
         if (i + 2 >= mesh.indices.size()) break;
 
-        // 转为 0-based
         GLint i0 = mesh.indices[i] - 1;
         GLint i1 = mesh.indices[i + 1] - 1;
         GLint i2 = mesh.indices[i + 2] - 1;
 
-        // 边界检查
         if (i0 >= 0 && i1 >= 0 && i2 >= 0 &&
             i0 < static_cast<GLint>(mesh.points.size()) &&
             i1 < static_cast<GLint>(mesh.points.size()) &&
@@ -99,26 +99,40 @@ osg::ref_ptr<osg::Geometry> createGeometryFromTriMesh(const TriMesh& mesh)
             triIndices.push_back(static_cast<GLuint>(i1));
             triIndices.push_back(static_cast<GLuint>(i2));
         }
-        i += 4; // 跳过 3 索引 + 1 个 0
+        i += 4;
     }
 
     if (triIndices.empty()) {
-        return nullptr; // 或返回空几何体
+        return nullptr;
     }
 
     // === 3. 创建 DrawElementsUInt ===
-    osg::ref_ptr<osg::DrawElementsUInt> drawElements = new osg::DrawElementsUInt(osg::PrimitiveSet::TRIANGLES);
-    drawElements->reserve(triIndices.size());
+    osg::ref_ptr<osg::DrawElementsUInt> drawElementsTriangles = new osg::DrawElementsUInt(osg::PrimitiveSet::TRIANGLES);
+    drawElementsTriangles->reserve(triIndices.size());
     for (GLuint idx : triIndices) {
-        drawElements->push_back(idx); // 安全：类型匹配 GLuint
+        drawElementsTriangles->push_back(idx);
     }
 
-    // === 4. 构建 Geometry ===
+    // === 4. 创建线条 PrimitiveSet ===
+    osg::ref_ptr<osg::DrawElementsUInt> drawElementsLines = new osg::DrawElementsUInt(osg::PrimitiveSet::LINES);
+    for (size_t i = 0; i < triIndices.size(); i += 3) { // For each triangle
+        drawElementsLines->push_back(triIndices[i]);
+        drawElementsLines->push_back(triIndices[i + 1]);
+
+        drawElementsLines->push_back(triIndices[i + 1]);
+        drawElementsLines->push_back(triIndices[i + 2]);
+
+        drawElementsLines->push_back(triIndices[i + 2]);
+        drawElementsLines->push_back(triIndices[i]);
+    }
+
+    // === 5. 构建 Geometry ===
     osg::ref_ptr<osg::Geometry> geometry = new osg::Geometry;
     geometry->setVertexArray(vertices.get());
-    geometry->addPrimitiveSet(drawElements.get());
+    geometry->addPrimitiveSet(drawElementsTriangles.get());
+    geometry->addPrimitiveSet(drawElementsLines.get());
 
-    // === 5. （可选）生成法向 ===
+    // === 6. （可选）生成法向 ===
     osg::ref_ptr<osg::Vec3Array> normals = new osg::Vec3Array;
     normals->resize(vertices->size(), osg::Vec3(0, 0, 0));
 
@@ -141,11 +155,23 @@ osg::ref_ptr<osg::Geometry> createGeometryFromTriMesh(const TriMesh& mesh)
     geometry->setNormalArray(normals.get());
     geometry->setNormalBinding(osg::Geometry::BIND_PER_VERTEX);
 
-    // === 6. （可选）设置颜色 ===
+    // === 7. （可选）设置颜色 ===
     osg::ref_ptr<osg::Vec4Array> colors = new osg::Vec4Array;
-    colors->push_back(osg::Vec4(0.8f, 0.8f, 1.0f, 1.0f));
+    colors->push_back(osg::Vec4(0.8f, 0.8f, 1.0f, 1.0f)); // 浅蓝色
     geometry->setColorArray(colors.get());
     geometry->setColorBinding(osg::Geometry::BIND_OVERALL);
+
+    // === 8. 设置不同的线条颜色（如果需要）===
+    osg::StateSet* stateset = geometry->getOrCreateStateSet();
+    osg::LineWidth* linewidth = new osg::LineWidth();
+    linewidth->setWidth(2.0f); // 线宽设置
+    stateset->setAttributeAndModes(linewidth, osg::StateAttribute::ON);
+
+    osg::ref_ptr<osg::Vec4Array> lineColors = new osg::Vec4Array;
+    lineColors->push_back(osg::Vec4(1.0f, 0.0f, 0.0f, 1.0f)); // 红色线条
+    osg::Material* material = new osg::Material;
+    material->setColorMode(osg::Material::AMBIENT_AND_DIFFUSE);
+    stateset->setAttribute(material);
 
     return geometry;
 }
@@ -187,11 +213,21 @@ void ShowTriMesh(const TriMesh& mesh)
 int main() {
     TriMesh mesh1, mesh2;
 
-    // Add first cube centered at origin with side length 2
-    AddCube(mesh1, 0, 0, 0, 2);
+    //// Add first cube centered at origin with side length 2
+    //AddCube(mesh1, 0, 0, 0, 2);
 
-    // Add second cube translated along X axis by 1 unit with side length 2
-    AddCube(mesh2, 1, 0, 0, 2);
+    //// Add second cube translated along X axis by 1 unit with side length 2
+    //AddCube(mesh2, 1, 0, 0, 2);
+
+    mesh1.points = {
+        {-1,-1,0},{-1,1,0},{1,1,0},{1,-1,0}
+    };
+    mesh1.indices = {  1,2,3, 0, 1,3,4, 0 };
+
+    mesh2.points = {
+        {0,-1,0},{0,1,0},{2,1,0},{2,-1,0}
+    };
+    mesh2.indices = { 1,2,3, 0, 1,3,4, 0 };
 
     TopoTriMesh* topo1 = new TopoTriMesh;
     topo1->Build(mesh1);
@@ -201,6 +237,7 @@ int main() {
     BooleanOperation booleanOp(topo1, topo2, BooleanOperation::DIFFERENCE);
     TopoTriMesh res;
     booleanOp.Execute(res);
+
 
     return 0;
 }

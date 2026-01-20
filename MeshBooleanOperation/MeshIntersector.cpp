@@ -367,6 +367,7 @@ static std::vector<Vec3d> BuildPolygonWithEdgePoints(
     return poly;
 }
 
+void ShowTriMesh(const TriMesh& mesh);
 void MeshIntersector::CoPlanarFaceInt(Face* f1, Face* f2)
 {
     std::vector<Vec3d> tri1 = f1->getPnts();
@@ -416,7 +417,6 @@ void MeshIntersector::CoPlanarFaceInt(Face* f1, Face* f2)
     m_mesh1.RemoveFace(f1);
     for (auto& e : e2Pts1) m_mesh1.RemoveEdge(e.first);
 
-
     for (auto& e : e2Pts2) {
         Face* cF = (e.first->lF == f2) ? e.first->rF : e.first->lF;
         if (cF) {
@@ -450,6 +450,15 @@ void MeshIntersector::CoPlanarFaceInt(Face* f1, Face* f2)
     std::vector<std::vector<Vec3d>> tris = GeomCalc::Triangulate(tri12Int);
     for (auto const& tri : tris)
         m_coPlanes.AddFace2TopoTriMesh(tri);
+
+    TriMesh t, o, co;
+    m_mesh1.ToMesh(o);
+    m_mesh2.ToMesh(t);
+    m_coPlanes.ToMesh(co);
+
+    ShowTriMesh(o);
+    ShowTriMesh(t);
+    ShowTriMesh(co);
 
     // ÏÔÊ¾½á¹û
 

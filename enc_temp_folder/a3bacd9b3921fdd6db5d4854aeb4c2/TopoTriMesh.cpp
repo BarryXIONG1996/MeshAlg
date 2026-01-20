@@ -188,10 +188,6 @@ void TopoTriMesh::ReleaseMem()
 }
 
 void TopoTriMesh::Build(const TriMesh& triMesh) {
-    auto IsLeft = [](const Vec3d& a, const Vec3d& b, const Vec3d& p){
-        return (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x) > g_epsilon;
-    };
-
     ReleaseMem();
 
     if (triMesh.indices.empty() || triMesh.points.empty()) {
@@ -244,8 +240,6 @@ void TopoTriMesh::Build(const TriMesh& triMesh) {
         f->bbox.Add(vs.at(i1)->pnt);
         f->bbox.Add(vs.at(i2)->pnt);
 
-        Vec3d center = (vs.at(i0)->pnt + vs.at(i1)->pnt + vs.at(i2)->pnt) / 3;
-
         // 构造边 key
         std::pair<int, int> e1_key = { std::min(i0, i1), std::max(i0, i1) };
         std::pair<int, int> e2_key = { std::min(i1, i2), std::max(i1, i2) };
@@ -257,11 +251,7 @@ void TopoTriMesh::Build(const TriMesh& triMesh) {
         // --- 处理 e0: (i0, i1) ---
         auto it1 = cEs.find(e1_key);
         if (it1 == cEs.end()) {
-            if (IsLeft(vs[i0]->pnt, vs[i1]->pnt, center))
-                tes[0] = new Edge{ vs[i0], vs[i1], f };
-            else
-                tes[0] = new Edge{ vs[i0], vs[i1], nullptr, f };
-
+            tes[0] = new Edge{ vs[i0], vs[i1], f };
             isENew[0] = true;
             es.push_back(tes[0]);
             cEs[e1_key] = tes[0];
@@ -269,21 +259,14 @@ void TopoTriMesh::Build(const TriMesh& triMesh) {
         }
         else {
             tes[0] = it1->second;
-            if (!tes[0]->rF)  // 第二个邻接面
-                tes[0]->rF = f;
-            else
-                tes[0]->lF = f;
+            tes[0]->rF = f; // 第二个邻接面
         }
         f->e = tes[0];
 
         // --- 处理 e1: (i1, i2) ---
         auto it2 = cEs.find(e2_key);
         if (it2 == cEs.end()) {
-            if (IsLeft(vs[i1]->pnt, vs[i2]->pnt, center))
-                tes[1] = new Edge{ vs[i1], vs[i2], f };
-            else
-                tes[1] = new Edge{ vs[i1], vs[i2], nullptr, f };
-
+            tes[1] = new Edge{ vs[i1], vs[i2], f };
             isENew[1] = true;
             es.push_back(tes[1]);
             cEs[e2_key] = tes[1];
@@ -291,20 +274,13 @@ void TopoTriMesh::Build(const TriMesh& triMesh) {
         }
         else {
             tes[1] = it2->second;
-            if (!tes[1]->rF)  // 第二个邻接面
-                tes[1]->rF = f;
-            else
-                tes[1]->lF = f;
+            tes[1]->rF = f;
         }
 
         // --- 处理 e2: (i2, i0) ---
         auto it3 = cEs.find(e3_key);
         if (it3 == cEs.end()) {
-            if (IsLeft(vs[i2]->pnt, vs[i0]->pnt, center))
-                tes[2] = new Edge{ vs[i2], vs[i0], f };
-            else
-                tes[2] = new Edge{ vs[i2], vs[i0], nullptr, f };
-
+            tes[2] = new Edge{ vs[i2], vs[i0], f };
             isENew[2] = true;
             es.push_back(tes[2]);
             cEs[e3_key] = tes[2];
@@ -312,10 +288,7 @@ void TopoTriMesh::Build(const TriMesh& triMesh) {
         }
         else {
             tes[2] = it3->second;
-            if (!tes[2]->rF)  // 第二个邻接面
-                tes[2]->rF = f;
-            else
-                tes[2]->lF = f;
+            tes[2]->rF = f;
         }
 
         // --- 设置边的邻接边（绕面顺序）---

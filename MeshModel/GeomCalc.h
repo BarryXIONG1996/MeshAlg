@@ -6,6 +6,9 @@ struct MESHMODELDLL GeomCalc
     // 计算面片法向
     static Vec3d CompuateNormal(std::vector<Vec3d>const& ps);
 
+    // 判断点与线段的位置关系
+    static bool IsLeft(const Vec3d& a, const Vec3d& b, const Vec3d& p);
+
     // 判断点是否在线段上
     static bool IsPointOnSegment(Vec3d const& p, Vec3d const& a, Vec3d const& b, double& paramP/*点p的参数*/);
 

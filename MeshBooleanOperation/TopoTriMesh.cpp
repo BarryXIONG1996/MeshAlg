@@ -1,4 +1,5 @@
 #include "TopoTriMesh.h"
+#include <GeomCalc.h>
 
 BndBox3d TopoTriMesh::GetBndBox() {
     BndBox3d bbox;
@@ -62,7 +63,8 @@ Face* TopoTriMesh::AddFace2TopoTriMesh(std::vector<Vec3d> const& pnts)
         }
     }
 
-    // 3. 设置边的拓扑关系（根据图片算法）
+    // 3. 设置边的拓扑关系
+    Vec3d center = (pnts[0] + pnts[1] + pnts[2])/3;
     Face* newF = new Face{ edges[0] };
     newF->topo = this;
     fs.push_back(newF);
@@ -73,7 +75,7 @@ Face* TopoTriMesh::AddFace2TopoTriMesh(std::vector<Vec3d> const& pnts)
         int next = (i + 1) % 3;
         int prev = (i - 1 + 3) % 3;
 
-        if (!edges[i]->lF) {
+        if (GeomCalc::IsLeft(edges[i]->v1->pnt, edges[i]->v2->pnt, center)) {
             edges[i]->lF = newF;
             edges[i]->lPE = edges[prev];
             edges[i]->lSE = edges[next];
@@ -188,10 +190,6 @@ void TopoTriMesh::ReleaseMem()
 }
 
 void TopoTriMesh::Build(const TriMesh& triMesh) {
-    auto IsLeft = [](const Vec3d& a, const Vec3d& b, const Vec3d& p){
-        return (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x) > g_epsilon;
-    };
-
     ReleaseMem();
 
     if (triMesh.indices.empty() || triMesh.points.empty()) {
@@ -252,17 +250,16 @@ void TopoTriMesh::Build(const TriMesh& triMesh) {
         std::pair<int, int> e3_key = { std::min(i2, i0), std::max(i2, i0) };
 
         Edge* tes[3];
-        bool isENew[3] = { false, false, false };
+        bool isFLeft[3] = { false, false, false };
 
         // --- 处理 e0: (i0, i1) ---
         auto it1 = cEs.find(e1_key);
         if (it1 == cEs.end()) {
-            if (IsLeft(vs[i0]->pnt, vs[i1]->pnt, center))
-                tes[0] = new Edge{ vs[i0], vs[i1], f };
+            if (GeomCalc::IsLeft(vs[i0]->pnt, vs[i1]->pnt, center))
+            tes[0] = new Edge{ vs[i0], vs[i1], f }, isFLeft[0] = true;
             else
                 tes[0] = new Edge{ vs[i0], vs[i1], nullptr, f };
 
-            isENew[0] = true;
             es.push_back(tes[0]);
             cEs[e1_key] = tes[0];
             if (!vs[i1]->e) vs[i1]->e = tes[0];
@@ -272,19 +269,18 @@ void TopoTriMesh::Build(const TriMesh& triMesh) {
             if (!tes[0]->rF)  // 第二个邻接面
                 tes[0]->rF = f;
             else
-                tes[0]->lF = f;
+                tes[0]->lF = f, isFLeft[0] = true;
         }
         f->e = tes[0];
 
         // --- 处理 e1: (i1, i2) ---
         auto it2 = cEs.find(e2_key);
         if (it2 == cEs.end()) {
-            if (IsLeft(vs[i1]->pnt, vs[i2]->pnt, center))
-                tes[1] = new Edge{ vs[i1], vs[i2], f };
+            if (GeomCalc::IsLeft(vs[i1]->pnt, vs[i2]->pnt, center))
+                tes[1] = new Edge{ vs[i1], vs[i2], f }, isFLeft[1] = true;
             else
                 tes[1] = new Edge{ vs[i1], vs[i2], nullptr, f };
 
-            isENew[1] = true;
             es.push_back(tes[1]);
             cEs[e2_key] = tes[1];
             if (!vs[i2]->e) vs[i2]->e = tes[1];
@@ -294,18 +290,17 @@ void TopoTriMesh::Build(const TriMesh& triMesh) {
             if (!tes[1]->rF)  // 第二个邻接面
                 tes[1]->rF = f;
             else
-                tes[1]->lF = f;
+                tes[1]->lF = f, isFLeft[1] = true;
         }
 
         // --- 处理 e2: (i2, i0) ---
         auto it3 = cEs.find(e3_key);
         if (it3 == cEs.end()) {
-            if (IsLeft(vs[i2]->pnt, vs[i0]->pnt, center))
-                tes[2] = new Edge{ vs[i2], vs[i0], f };
+            if (GeomCalc::IsLeft(vs[i2]->pnt, vs[i0]->pnt, center))
+                tes[2] = new Edge{ vs[i2], vs[i0], f }, isFLeft[2] = true;
             else
                 tes[2] = new Edge{ vs[i2], vs[i0], nullptr, f };
 
-            isENew[2] = true;
             es.push_back(tes[2]);
             cEs[e3_key] = tes[2];
             if (!vs[i0]->e) vs[i0]->e = tes[2];
@@ -315,7 +310,7 @@ void TopoTriMesh::Build(const TriMesh& triMesh) {
             if (!tes[2]->rF)  // 第二个邻接面
                 tes[2]->rF = f;
             else
-                tes[2]->lF = f;
+                tes[2]->lF = f, isFLeft[2] = true;
         }
 
         // --- 设置边的邻接边（绕面顺序）---
@@ -326,7 +321,7 @@ void TopoTriMesh::Build(const TriMesh& triMesh) {
             Edge* prev = tes[(i - 1 + 3) % 3]; // 前一条边（逆时针）
             Edge* next = tes[(i + 1) % 3];     // 后一条边
 
-            if (isENew[i]) {
+            if (isFLeft[i] = true) {
                 // 当前面在边的 "左侧"
                 cur->lPE = prev;
                 cur->lSE = next;

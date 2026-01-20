@@ -447,6 +447,9 @@ void MeshIntersector::CoPlanarFaceInt(Face* f1, Face* f2)
     std::vector<std::vector<Vec3d>> tris = GeomCalc::Triangulate(tri12Int);
     for (auto const& tri : tris)
         m_coPlanes.AddFace2TopoTriMesh(tri);
+
+    // 显示结果
+
 }
 
 enum TopoType { EdgeType, VertexType };
@@ -686,18 +689,25 @@ void MeshIntersector::NonCoPlanarFaceInt(Face* f1, Face* f2)
     if (intPnts.size() != weights.size() || intPnts.size() != allEfs.size() || intPnts.size() != 2)
         return;
     std::vector<int> seg;
-    for (int intIdx = 0; intIdx < intPnts.size(); ++intIdx) // 解决奇异性问题
-    {
+    for (int intIdx = 0; intIdx < intPnts.size(); ++intIdx) {// 解决奇异性问题
         auto const& efs = allEfs.at(intIdx);
         bool exist = false;
-        for (auto const& ef : efs) 
-        {
-            if (!m_ef2Int.count(ef))
-                continue;
+        for (auto const& ef : efs) {
+            if (!m_ef2Int.count(ef)) continue;
             exist = true;
-            assert(m_ef2Int.at(ef).size() < 2, "线面交点多于2个，错误！");
+            std::set<int> indices = m_ef2Int.at(ef);
+            bool isSamePnt = false;
+            for (int idx : indices) {
+                if ((m_intersectPnts.at(idx) - intPnts.at(intIdx)).Length() < g_epsilon) {
+                    isSamePnt = true;
+                    seg.push_back(idx);
+                    break;
+                }
+            }
+            if (isSamePnt) break;
+            int otherIntIdx = *indices.begin();
+            assert(indices.size() < 2, "边面交点数目大于2!");
             double w = weights.at(intIdx);
-            int otherIntIdx = *m_ef2Int.at(ef).begin();
             double otherIntW = m_weights.at(otherIntIdx);
             if (w >= 2.0 && otherIntW >= 2.0) // 线面共面，此时可以有两个交点
             {
@@ -717,21 +727,17 @@ void MeshIntersector::NonCoPlanarFaceInt(Face* f1, Face* f2)
             }
         }
 
-        if (exist)
-        {
-            for (auto const& ef : efs)
-            {
+        if (exist) {
+            for (auto const& ef : efs) {
                 m_ef2Int[ef].insert(seg.back());
             }
         }
-        else
-        {
+        else {
             m_intersectPnts.push_back(intPnts.at(intIdx));
             m_weights.push_back(weights.at(intIdx));
             int segEndIdx = m_intersectPnts.size() - 1;
             seg.push_back(segEndIdx);
-            for (auto const& ef : efs)
-            {
+            for (auto const& ef : efs) {
                 m_ef2Int.insert({ ef, {(int)segEndIdx} });
             }
         }

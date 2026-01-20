@@ -313,6 +313,11 @@ void TopoTriMesh::Build(const TriMesh& triMesh) {
     }
 }
 
+void TopoTriMesh::ToMesh(TriMesh& mesh)
+{
+
+}
+
 std::vector<Edge*> Vertex::GetAdjacentEdges()
 {
     if (!e) return {};

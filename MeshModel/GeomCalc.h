@@ -36,7 +36,7 @@ struct MESHMODELDLL GeomCalc
         std::vector<Vec3d>& tri1CollapseTri2
     );
 
-    // 多边形的三角化
+    // 多边形的三角化（结果法向保持一致）
     static std::vector<std::vector<Vec3d>> Triangulate(std::vector<Vec3d> const& poly);
 
     // 包含限制边的三角化

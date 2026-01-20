@@ -64,6 +64,7 @@ Face* TopoTriMesh::AddFace2TopoTriMesh(std::vector<Vec3d> const& pnts)
 
     // 3. 设置边的拓扑关系（根据图片算法）
     Face* newF = new Face{ edges[0] };
+    newF->topo = this;
     fs.push_back(newF);
     for (auto const& pnt : pnts) newF->bbox.Add(pnt);
 
@@ -143,7 +144,15 @@ void TopoTriMesh::RemoveEdge(Edge* e)
             if (adj->rPE == e) adj->rPE = nullptr;
             if (adj->rSE == e) adj->rSE = nullptr;
         }
-        };
+        if (v->e == e) {
+            for (Edge* adj : adjEs) {
+                if (adj == e || adj->v2 != v)
+                    continue;
+                v->e = adj;
+                break;
+            }
+        }
+    };
 
     cleanVertex(e->v1);
     cleanVertex(e->v2);

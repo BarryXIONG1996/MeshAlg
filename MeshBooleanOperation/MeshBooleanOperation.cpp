@@ -10,11 +10,11 @@ void AddCube(TriMesh& mesh, double cx, double cy, double cz, double side) {
         {cx - side / 2, cy - side / 2, cz - side / 2},
         {cx + side / 2, cy - side / 2, cz - side / 2},
         {cx + side / 2, cy + side / 2, cz - side / 2},
-        {cx - side / 2, cy + side / 2, cz - side / 2},
+        {cx - side / 2, cy + side / 2, cz - side / 2},// 底面四点
         {cx - side / 2, cy - side / 2, cz + side / 2},
         {cx + side / 2, cy - side / 2, cz + side / 2},
         {cx + side / 2, cy + side / 2, cz + side / 2},
-        {cx - side / 2, cy + side / 2, cz + side / 2}
+        {cx - side / 2, cy + side / 2, cz + side / 2} // 顶面四点
     };
 
     // Store the current size of points to adjust indices accordingly
@@ -27,7 +27,7 @@ void AddCube(TriMesh& mesh, double cx, double cy, double cz, double side) {
 
     // Define the faces of the cube as triangles
     std::vector<std::array<int, 4>> faces = {
-        {0, 1, 2, 3}, // bottom face
+        {0, 3, 2, 1}, // bottom face
         {4, 5, 6, 7}, // top face
         {0, 1, 5, 4}, // front face
         {1, 2, 6, 5}, // right face

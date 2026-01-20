@@ -208,8 +208,11 @@ bool MeshIntersector::Execute(TopoTriMesh& coPlanes)
         std::vector<Edge*> es = f->getEdges();
         for (auto* e : es) {
             if (m_edge2Ints.count(e)) {
-                if (e->lF == f) rmFaces.insert(e->rF);
-                else rmFaces.insert(e->lF);
+                if (e->lF == f) {
+                    if (e->rF) rmFaces.insert(e->rF);
+                } else {
+                    if (e->lF) rmFaces.insert(e->lF);
+                }
             }
         }
     }

@@ -12,6 +12,8 @@ BooleanOperation::BooleanOperation(
 {
 }
 
+extern void ShowTriMesh(const TriMesh& mesh);
+
  bool BooleanOperation::Execute(TopoTriMesh& res)
 {
      if (!m_obj || !m_sub)
@@ -24,6 +26,17 @@ BooleanOperation::BooleanOperation(
     TopoTriMesh coPlanes;
     if (!intersector.Execute(coPlanes))
         return false;
+
+#ifdef _DEBUG
+    TriMesh t, o, co;
+    m_obj->ToMesh(o);
+    m_sub->ToMesh(t);
+    coPlanes.ToMesh(co);
+
+    ShowTriMesh(o);
+    ShowTriMesh(t);
+    ShowTriMesh(co);
+#endif
 
     // 2.≤º∂˚‘ÀÀ„
     BooleanOpHelper boolHelper(*m_obj, *m_sub, coPlanes, m_opType);

@@ -315,7 +315,44 @@ void TopoTriMesh::Build(const TriMesh& triMesh) {
 
 void TopoTriMesh::ToMesh(TriMesh& mesh)
 {
+    mesh.points.clear();
+    mesh.indices.clear();
 
+    if (vs.empty()) {
+        return;
+    }
+
+    // Step 1: 导出所有顶点，并建立 Vertex* → 1-based index 映射
+    std::map<Vertex*, int> vertexToIndex;
+    mesh.points.reserve(vs.size());
+    for (size_t i = 0; i < vs.size(); ++i) {
+        mesh.points.push_back(vs[i]->pnt);
+        vertexToIndex[vs[i]] = static_cast<int>(i + 1); // 1-based
+    }
+
+    // Step 2: 遍历每个面，导出三角形（带 0 分隔符）
+    for (Face* f : fs) {
+        if (!f) continue;
+
+        std::vector<Vertex*> verts = f->getVertices();
+        if (verts.size() != 3) continue; // 只处理三角形
+
+        // 获取 1-based 索引
+        auto it0 = vertexToIndex.find(verts[0]);
+        auto it1 = vertexToIndex.find(verts[1]);
+        auto it2 = vertexToIndex.find(verts[2]);
+        if (it0 == vertexToIndex.end() ||
+            it1 == vertexToIndex.end() ||
+            it2 == vertexToIndex.end()) {
+            continue; // 安全检查
+        }
+
+        // 写入：i0, i1, i2, 0
+        mesh.indices.push_back(it0->second);
+        mesh.indices.push_back(it1->second);
+        mesh.indices.push_back(it2->second);
+        mesh.indices.push_back(0);
+    }
 }
 
 std::vector<Edge*> Vertex::GetAdjacentEdges()

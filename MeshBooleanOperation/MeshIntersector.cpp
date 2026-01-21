@@ -289,9 +289,8 @@ void MeshIntersector::CoPlanarFaceInt(Face* f1, Face* f2)
     std::vector<Vec3d> tri1 = f1->getPnts();
     std::vector<Vec3d> tri2 = f2->getPnts();
 
-    std::vector<std::vector<Vec3d>> tri1Out2, tri2Out1;
     std::vector<Vec3d> tri12Int;
-    GeomCalc::TriRegionSplit(tri1, tri2, tri1Out2, tri2Out1, tri12Int);
+    GeomCalc::PolyIntersect(tri1, tri2, tri12Int);
 
     if (tri12Int.size() < 3) return;
 

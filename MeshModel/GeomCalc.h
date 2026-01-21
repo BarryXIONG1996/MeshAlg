@@ -36,14 +36,11 @@ struct MESHMODELDLL GeomCalc
         const Vec3d& planeNormal,
         double& t);
 
-    // 三角形共面裁剪
-    static bool TriRegionSplit(
-        std::vector<Vec3d>const& tri1, 
-        std::vector<Vec3d>const& tri2, 
-        std::vector<std::vector<Vec3d>>& tri1OutTri2, 
-        std::vector<std::vector<Vec3d>>& tri2OutTri1, 
-        std::vector<Vec3d>& tri1CollapseTri2
-    );
+    // 多边形求交
+    static bool PolyIntersect(
+        const std::vector<Vec3d>& poly1,
+        const std::vector<Vec3d>& poly2,
+        std::vector<Vec3d>& outIntersection);
 
     // 多边形的三角化（结果法向保持一致）
     static std::vector<std::vector<Vec3d>> Triangulate(std::vector<Vec3d> const& poly);
@@ -51,6 +48,5 @@ struct MESHMODELDLL GeomCalc
     // 包含限制边的三角化
     static std::vector<std::vector<Vec3d>> TriangulateWithConstraints(
         const std::vector<Vec3d>& outerBoundary,
-        const std::vector<std::vector<Vec3d>>& intersectionPolylines
-    );
+        const std::vector<std::vector<Vec3d>>& intersectionPolylines);
 };

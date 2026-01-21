@@ -4,6 +4,8 @@
 #include <cmath>
 #include <memory>
 
+using namespace Clipper2Lib;
+
 Vec3d GeomCalc::CompuateNormal(std::vector<Vec3d> const& pnts)
 {
     if (pnts.size() < 3) return Vec3d{ 0, 0, 0 };
@@ -254,48 +256,68 @@ bool GeomCalc::linePlaneIntersect(
     return true;
 }
 
-using namespace Clipper2Lib;
 
-bool GeomCalc::TriRegionSplit(
-    const std::vector<Vec3d>& tri1,
-    const std::vector<Vec3d>& tri2,
-    std::vector<std::vector<Vec3d>>& tri1OutTri2,   // tri1 \ tri2
-    std::vector<std::vector<Vec3d>>& tri2OutTri1,   // tri2 \ tri1
-    std::vector<Vec3d>& tri1CollapseTri2            // tri1 collapse tri2
-)
+
+// 主函数：多边形求交（共面假设）
+bool GeomCalc::PolyIntersect(
+    const std::vector<Vec3d>& poly1,
+    const std::vector<Vec3d>& poly2,
+    std::vector<Vec3d>& outIntersection)
 {
+    // 辅助：计算多边形有向面积（2D）
+    auto SignedArea = [](const PathD& p) {
+        if (p.size() < 3) return 0.0;
+        double area = 0.0;
+        size_t n = p.size();
+        for (size_t i = 0; i < n; ++i) {
+            size_t j = (i + 1) % n;
+            area += p[i].x * p[j].y - p[j].x * p[i].y;
+        }
+        return area * 0.5;
+    };
+
     const double eps = g_epsilon;
     const double epsSq = eps * eps;
+    outIntersection.clear();
 
-    // === 1. 输入验证 ===
-    if (tri1.size() != 3 || tri2.size() != 3) {
-        return false;
+    if (poly1.size() < 3 || poly2.size() < 3) {
+        return true; // 无效多边形，无交集
     }
 
-    // === 2. 检查退化三角形 ===
-    auto isDegenerate = [epsSq](const std::vector<Vec3d>& t) -> bool {
-        Vec3d e1 = t[1] - t[0];
-        Vec3d e2 = t[2] - t[0];
+    // === 1. 用 poly1 计算参考法向和平面 ===
+    Vec3d origin = poly1[0];
+    Vec3d normalSum{ 0, 0, 0 };
+    bool hasValidNormal = false;
+
+    // 遍历 poly1 的连续三角形扇区，累加法向
+    for (size_t i = 1; i + 1 < poly1.size(); ++i) {
+        Vec3d e1 = poly1[i] - poly1[0];
+        Vec3d e2 = poly1[i + 1] - poly1[0];
         Vec3d n = e1.Cross(e2);
-        return n.LengthSq() < epsSq;
-        };
-
-    if (isDegenerate(tri1) || isDegenerate(tri2)) {
-        return false;
+        if (n.LengthSq() > epsSq) {
+            normalSum = normalSum + n;
+            hasValidNormal = true;
+        }
     }
 
-    // === 3. 构建共面局部坐标系（以 tri1 为基准）===
-    Vec3d origin = tri1[0];
-    Vec3d e1 = tri1[1] - tri1[0];
-    Vec3d e2 = tri1[2] - tri1[0];
-    Vec3d normal = e1.Cross(e2).Normalization();
+    if (!hasValidNormal || normalSum.LengthSq() < epsSq) {
+        // poly1 退化（共线或点）
+        return true;
+    }
 
-    // 选择不共线向量构建正交基
-    Vec3d arbitrary = (std::abs(normal.x) < 0.9) ? Vec3d{ 1, 0, 0 } : Vec3d{ 0, 1, 0 };
-    Vec3d x_axis = normal.Cross(arbitrary).Normalization();
-    Vec3d y_axis = normal.Cross(x_axis).Normalization(); // 右手系
+    Vec3d refNormal = normalSum.Normalization();
 
-    // === 4. 定义 3D to 2D 转换函数 ===
+    // === 2. 构建局部坐标系 ===
+    Vec3d arbitrary = (std::abs(refNormal.x) < 0.9) ? Vec3d{ 1, 0, 0 } : Vec3d{ 0, 1, 0 };
+    Vec3d x_axis = refNormal.Cross(arbitrary);
+    if (x_axis.LengthSq() < epsSq) {
+        arbitrary = Vec3d{ 0, 0, 1 };
+        x_axis = refNormal.Cross(arbitrary);
+    }
+    x_axis = x_axis.Normalization();
+    Vec3d y_axis = refNormal.Cross(x_axis); // 自动单位化，右手系
+
+    // === 3. 投影函数 ===
     auto to2D = [&](const Vec3d& p) -> PointD {
         Vec3d rel = p - origin;
         return PointD(rel.Dot(x_axis), rel.Dot(y_axis));
@@ -305,57 +327,73 @@ bool GeomCalc::TriRegionSplit(
         return origin + x_axis * pt.x + y_axis * pt.y;
         };
 
-    // === 5. 投影三角形到 2D 并确保 CCW ===
-    auto projectTri = [&](const std::vector<Vec3d>& tri) -> PathD {
-        PathD path = { to2D(tri[0]), to2D(tri[1]), to2D(tri[2]) };
-        // 计算有向面积判断方向
-        double area = (path[1].x - path[0].x) * (path[2].y - path[0].y) -
-            (path[2].x - path[0].x) * (path[1].y - path[0].y);
-        if (area < 0) std::reverse(path.begin(), path.end()); // 转为 CCW
+    // === 4. 投影并统一为 CCW（相对于 refNormal）===
+    auto projectAsCCW = [&](const std::vector<Vec3d>& poly) -> PathD {
+        PathD path;
+        path.reserve(poly.size());
+        for (const auto& p : poly) {
+            path.push_back(to2D(p));
+        }
+        if (path.size() < 3) return path;
+
+        double area = SignedArea(path);
+        if (area < 0) {
+            std::reverse(path.begin(), path.end());
+        }
         return path;
         };
 
-    PathD p1 = projectTri(tri1);
-    PathD p2 = projectTri(tri2);
+    PathD p1 = projectAsCCW(poly1);
+    PathD p2 = projectAsCCW(poly2);
 
-    PathsD subj{ p1 };
-    PathsD clip{ p2 };
+    // === 5. 执行交集运算 ===
+    PathsD inter = Intersect({ p1 }, { p2 }, FillRule::EvenOdd);
 
-    // === 6. 执行布尔运算 ===
-    PathsD inter = Intersect(subj, clip, FillRule::EvenOdd);
-    PathsD diff1 = Difference(subj, clip, FillRule::EvenOdd); // tri1 \ tri2
-    PathsD diff2 = Difference(clip, subj, FillRule::EvenOdd); // tri2 \ tri1
+    // === 6. 转回 3D，取最大面积的多边形（或第一个有效）===
+    PathD bestPoly;
+    double maxArea = 0.0;
 
-    // === 7. 转换回 3D ===
-    auto pathsTo3D = [&](const PathsD& paths) -> std::vector<std::vector<Vec3d>> {
-        std::vector<std::vector<Vec3d>> result;
-        for (const auto& poly : paths) {
-            if (poly.size() < 3) continue; // 忽略退化多边形
-            std::vector<Vec3d> poly3D;
-            poly3D.reserve(poly.size());
-            for (const auto& pt : poly) {
-                poly3D.push_back(to3D(pt));
-            }
-            result.emplace_back(std::move(poly3D));
-        }
-        return result;
-        };
-
-    tri1OutTri2 = pathsTo3D(diff1);
-    tri2OutTri1 = pathsTo3D(diff2);
-
-    // === 8. 处理交集（取第一个非空多边形，三角形交集最多一个连通区域）===
-    tri1CollapseTri2.clear();
     for (const auto& poly : inter) {
         if (poly.size() >= 3) {
-            tri1CollapseTri2.reserve(poly.size());
-            for (const auto& pt : poly) {
-                tri1CollapseTri2.push_back(to3D(pt));
+            double area = std::abs(SignedArea(poly));
+            if (area > maxArea) {
+                maxArea = area;
+                bestPoly = poly;
             }
-            break; // 只取第一个（理论上唯一）
         }
     }
 
+    if (bestPoly.empty()) {
+        return true; // 无有效交集
+    }
+
+    // 转为 3D
+    std::vector<Vec3d> candidate;
+    candidate.reserve(bestPoly.size());
+    for (const auto& pt : bestPoly) {
+        candidate.push_back(to3D(pt));
+    }
+
+    // === 7. 确保法向与 poly1 一致 ===
+    // 用 candidate 前三个不共线点计算法向
+    Vec3d candNormal{ 0, 0, 0 };
+    bool foundNormal = false;
+    for (size_t i = 0; i + 2 < candidate.size(); ++i) {
+        Vec3d e1 = candidate[i + 1] - candidate[i];
+        Vec3d e2 = candidate[i + 2] - candidate[i];
+        Vec3d n = e1.Cross(e2);
+        if (n.LengthSq() > epsSq) {
+            candNormal = n;
+            foundNormal = true;
+            break;
+        }
+    }
+
+    if (foundNormal && candNormal.Dot(refNormal) < 0) {
+        std::reverse(candidate.begin(), candidate.end());
+    }
+
+    outIntersection = std::move(candidate);
     return true;
 }
 

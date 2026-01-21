@@ -179,103 +179,19 @@ bool MeshIntersector::Execute(TopoTriMesh& coPlanes)
         }
     };
 
-    // 首先, 计算共面部分并移除
+    // 首先, 计算共面部分
     IntersectProcess(std::bind(&MeshIntersector::CoPlanarFaceInt, this, std::placeholders::_1, std::placeholders::_2), true);
+
+    // 然后，移除共面部分
+    ProcessCoPlanarIntersectResult();
+
     coPlanes = m_coPlanes;
 
     // 然后, 非共面部分进行求交
     IntersectProcess(std::bind(&MeshIntersector::NonCoPlanarFaceInt, this, std::placeholders::_1, std::placeholders::_2), false);
 
     // 最后，基于求交结果编辑拓扑
-    std::set<Face*> rmFaces;
-    std::set<Edge*> rmEdges1, rmEdges2;
-    for (auto const& [f, segs] : m_face2Segs) {
-        auto const& es = f->getEdges();
-        for (auto seg : segs) {
-            int segS = m_intSegs.at(seg).first;
-            int segE = m_intSegs.at(seg).second;
-            for (auto const& e : es) {
-                if (IsPointOnEdgeInterior(m_intersectPnts.at(segS), e))
-                    m_edge2Ints[e].insert(segS);
-                if (IsPointOnEdgeInterior(m_intersectPnts.at(segE), e))
-                    m_edge2Ints[e].insert(segE);
-            }
-        }
-    }
-
-    for (auto const& [f, _] : m_face2Segs) {
-        rmFaces.insert(f);
-        std::vector<Edge*> es = f->getEdges();
-        for (auto* e : es) {
-            if (m_edge2Ints.count(e)) {
-                if (e->lF == f) {
-                    if (e->rF) rmFaces.insert(e->rF);
-                } else {
-                    if (e->lF) rmFaces.insert(e->lF);
-                }
-            }
-        }
-    }
-    for (auto const& [e, _] : m_edge2Ints)
-    {
-        if (e->lF) {
-            if (e->lF->topo == &m_mesh1) rmEdges1.insert(e);
-            else rmEdges2.insert(e);
-        }
-        else {
-            if (e->rF->topo == &m_mesh1) rmEdges1.insert(e);
-            else rmEdges2.insert(e);
-        }
-    }
-
-    std::vector<std::vector<Vec3d>> reTris1, reTris2;
-    for (auto const& f : rmFaces) {
-        auto const& es = f->getEdges();
-        std::vector<Vec3d> boundary;
-        for (auto const& e : es) {
-            Vec3d start, end;
-            if (e->lF == f)
-                start = e->v1->pnt, end = e->v2->pnt;
-            else
-                start = e->v2->pnt, end = e->v1->pnt;
-            std::vector<Vec3d> interPnts;
-            if (m_edge2Ints.count(e))
-                std::for_each(m_edge2Ints.at(e).begin(), m_edge2Ints.at(e).end(), [&](int idx) { interPnts.push_back(m_intersectPnts.at(idx)); });
-            boundary.push_back(start);
-            boundary.insert(boundary.end(), interPnts.begin(), interPnts.end());
-            boundary.push_back(end); // 首尾点重复添加，之后会去重
-        }
-        std::vector<std::vector<Vec3d>> intSegs;
-        if (m_face2Segs.count(f)) {
-            for (auto const& seg : m_face2Segs.at(f)) {
-                Vec3d s = m_intersectPnts.at(m_intSegs.at(seg).first);
-                Vec3d e = m_intersectPnts.at(m_intSegs.at(seg).second);
-                intSegs.push_back({ s,e });
-            }
-        }
-        std::vector<std::vector<Vec3d>> tris = GeomCalc::TriangulateWithConstraints(boundary, intSegs);
-        if (f->topo == &m_mesh1)
-            reTris1.insert(reTris1.end(), tris.begin(), tris.end());
-        if (f->topo == &m_mesh2)
-            reTris2.insert(reTris2.end(), tris.begin(), tris.end());
-    }
-
-    for (auto& f : rmFaces) {
-        if (f->topo == &m_mesh1) m_mesh1.RemoveFace(f);
-        else m_mesh2.RemoveFace(f);
-        if (f) delete f;
-    }
-    for (auto& e : rmEdges1) { 
-        m_mesh1.RemoveEdge(e); 
-        if (e) delete e;
-    };
-    for (auto& e : rmEdges2) { 
-        m_mesh2.RemoveEdge(e);
-        if (e) delete e;
-    };
-
-    for (auto& tri : reTris1) m_mesh1.AddFace2TopoTriMesh(tri);
-    for (auto& tri : reTris2) m_mesh2.AddFace2TopoTriMesh(tri);
+    ProcessNonCoPlanarIntersectResult();
 
     return true;
 }
@@ -379,6 +295,80 @@ void MeshIntersector::CoPlanarFaceInt(Face* f1, Face* f2)
 
     if (tri12Int.size() < 3) return;
 
+    m_coPlanarIntSegs.push_back(std::move(tri12Int));
+    m_face2Segs[f1].insert(static_cast<int>(m_coPlanarIntSegs.size() - 1));
+    m_face2Segs[f2].insert(static_cast<int>(m_coPlanarIntSegs.size() - 1));
+}
+
+void MeshIntersector::ProcessCoPlanarIntersectResult()
+{
+    // 获取待删除的面，边
+    std::set<Face*> rmFaces;
+    std::set<Edge*> rmEdges1, rmEdges2;
+    for (auto const& [f, segs] : m_face2Segs) {
+        rmFaces.insert(f);
+        for (auto seg : segs) {
+            for (int pIdx = 0; pIdx < m_coPlanarIntSegs.at(seg).size(); ++pIdx) {
+                auto const& pnt = m_coPlanarIntSegs.at(seg).at(pIdx);
+                for (auto const& e : f->getEdges()) {
+                    if (!IsPointOnEdgeInterior(pnt, e)) continue;
+                    m_edge2CoPlanarInts[e].insert({ seg,pIdx });
+                    if (e->lF == f) {
+                        if (e->rF) rmFaces.insert(e->rF);
+                    }
+                    else {
+                        if (e->lF) rmFaces.insert(e->lF);
+                    }
+                    if (f->topo == &m_mesh1) rmEdges1.insert(e);
+                    else rmEdges2.insert(e);
+                }
+            }
+        }
+    }
+
+    // 重新三角化待删除的面
+    std::vector<std::vector<Vec3d>> reTris1, reTris2;
+    for (auto const& f : rmFaces) {
+        std::vector<std::vector<Vec3d>> bnds = { ExtractOrderedBoundary(f) };
+        if (m_face2Segs.count(f)) {
+            for (auto const& seg : m_face2Segs.at(f)) {
+                std::vector<Vec3d> cPIntS =  m_coPlanarIntSegs.at(seg);
+                for (auto bnd : bnds) {
+                    std::vector<std::vector<Vec3d>> tri1OutTri2, tri2OutTri1;
+                    std::vector<Vec3d> tri1CollapseTri2;
+                    GeomCalc::TriRegionSplit(bnd, cPIntS, tri1OutTri2, tri2OutTri1, tri1CollapseTri2);
+                }
+            }
+        }
+        std::vector<std::vector<Vec3d>> tris = GeomCalc::TriangulateWithConstraints(boundary, intSegs);
+        if (f->topo == &m_mesh1)
+            reTris1.insert(reTris1.end(), tris.begin(), tris.end());
+        if (f->topo == &m_mesh2)
+            reTris2.insert(reTris2.end(), tris.begin(), tris.end());
+    }
+
+    for (auto& f : rmFaces) {
+        if (f->topo == &m_mesh1) m_mesh1.RemoveFace(f);
+        else m_mesh2.RemoveFace(f);
+        if (f) delete f;
+    }
+    for (auto& e : rmEdges1) {
+        m_mesh1.RemoveEdge(e);
+        if (e) delete e;
+    };
+    for (auto& e : rmEdges2) {
+        m_mesh2.RemoveEdge(e);
+        if (e) delete e;
+    };
+
+    for (auto& tri : reTris1) m_mesh1.AddFace2TopoTriMesh(tri);
+    for (auto& tri : reTris2) m_mesh2.AddFace2TopoTriMesh(tri);
+    
+    // 清理数据
+    m_face2Segs.clear();
+    m_coPlanarIntSegs.clear();
+    m_edge2CoPlanarInts.clear();
+#if 0
     auto edges1 = f1->getEdges();
     auto edges2 = f2->getEdges();
 
@@ -443,7 +433,7 @@ void MeshIntersector::CoPlanarFaceInt(Face* f1, Face* f2)
         for (auto const& tri : tris)
         {
             Face* newF = m_mesh2.AddFace2TopoTriMesh(tri);
-            m_accelerator->Build({newF});
+            m_accelerator->Build({ newF });
         }
     }
 
@@ -459,9 +449,7 @@ void MeshIntersector::CoPlanarFaceInt(Face* f1, Face* f2)
     ShowTriMesh(o);
     ShowTriMesh(t);
     ShowTriMesh(co);
-
-    // 显示结果
-
+#endif
 }
 
 enum TopoType { EdgeType, VertexType };
@@ -758,4 +746,137 @@ void MeshIntersector::NonCoPlanarFaceInt(Face* f1, Face* f2)
     int intSegIndex = m_intSegs.size() - 1;
     m_face2Segs[f1].insert(intSegIndex);
     m_face2Segs[f2].insert(intSegIndex);
+}
+
+void MeshIntersector::ProcessNonCoPlanarIntersectResult()
+{
+    // 获取待删除的面和边
+    std::set<Face*> rmFaces;
+    std::set<Edge*> rmEdges1, rmEdges2;
+    for (auto const& [f, segs] : m_face2Segs) {
+        rmFaces.insert(f);
+        for (auto seg : segs) {
+            int segS = m_intSegs.at(seg).first;
+            int segE = m_intSegs.at(seg).second;
+            for (auto const& e : f->getEdges()) {
+                bool isPntOnEdge = false;
+                if (IsPointOnEdgeInterior(m_intersectPnts.at(segS), e))
+                    m_edge2Ints[e].insert(segS), isPntOnEdge = true;
+                if (IsPointOnEdgeInterior(m_intersectPnts.at(segE), e))
+                    m_edge2Ints[e].insert(segE), isPntOnEdge = true;
+                if (isPntOnEdge) {
+                    if (e->lF == f) {
+                        if (e->rF) rmFaces.insert(e->rF);
+                    }
+                    else {
+                        if (e->lF) rmFaces.insert(e->lF);
+                    }
+                    if (f->topo == &m_mesh1) rmEdges1.insert(e);
+                    else rmEdges2.insert(e);
+                }
+            }
+        }
+    }
+
+    // 重新三角化待删除的面
+    std::vector<std::vector<Vec3d>> reTris1, reTris2;
+    for (auto const& f : rmFaces) {
+        std::vector<Vec3d> boundary = ExtractOrderedBoundary(f);
+        std::vector<std::vector<Vec3d>> intSegs;
+        if (m_face2Segs.count(f)) {
+            for (auto const& seg : m_face2Segs.at(f)) {
+                Vec3d s = m_intersectPnts.at(m_intSegs.at(seg).first);
+                Vec3d e = m_intersectPnts.at(m_intSegs.at(seg).second);
+                intSegs.push_back({ s,e });
+            }
+        }
+        std::vector<std::vector<Vec3d>> tris = GeomCalc::TriangulateWithConstraints(boundary, intSegs);
+        if (f->topo == &m_mesh1)
+            reTris1.insert(reTris1.end(), tris.begin(), tris.end());
+        if (f->topo == &m_mesh2)
+            reTris2.insert(reTris2.end(), tris.begin(), tris.end());
+    }
+
+    for (auto& f : rmFaces) {
+        if (f->topo == &m_mesh1) m_mesh1.RemoveFace(f);
+        else m_mesh2.RemoveFace(f);
+        if (f) delete f;
+    }
+    for (auto& e : rmEdges1) {
+        m_mesh1.RemoveEdge(e);
+        if (e) delete e;
+    };
+    for (auto& e : rmEdges2) {
+        m_mesh2.RemoveEdge(e);
+        if (e) delete e;
+    };
+
+    for (auto& tri : reTris1) m_mesh1.AddFace2TopoTriMesh(tri);
+    for (auto& tri : reTris2) m_mesh2.AddFace2TopoTriMesh(tri);
+
+    // 清理数据
+    m_face2Segs.clear();
+    m_intSegs.clear();
+    m_intersectPnts.clear();
+    m_edge2Ints.clear();
+}
+
+std::vector<Vec3d> MeshIntersector::ExtractOrderedBoundary(Face* f)
+{
+    auto const& es = f->getEdges();      // 边列表
+    auto const& edir = f->getEdgeDir();  // 每条边的方向：true 表示 v1→v2 与面环绕一致
+
+    if (es.empty()) {
+        return {};
+    }
+
+    std::vector<Vec3d> boundary;
+
+    for (size_t i = 0; i < es.size(); ++i) {
+        Edge* e = es[i];
+        Vec3d start, end;
+
+        // 根据面的环绕方向确定边的起点和终点
+        if (edir[i]) {
+            start = e->v1->pnt;
+            end = e->v2->pnt;
+        }
+        else {
+            start = e->v2->pnt;
+            end = e->v1->pnt;
+        }
+
+        // 收集该边上的所有交点
+        std::vector<Vec3d> interPnts;
+        auto edgeIt = m_edge2Ints.find(e);
+        if (edgeIt != m_edge2Ints.end()) {
+            for (int idx : edgeIt->second) {
+                if (idx >= 0 && idx < static_cast<int>(m_intersectPnts.size())) {
+                    interPnts.push_back(m_intersectPnts[idx]);
+                }
+            }
+        }
+
+        // 对边上的点（start, end + 交点）按从 start 到 end 排序
+        std::vector<Vec3d> ePnts = GeomCalc::OrderPointsOnSegment(start, end, interPnts);
+
+        if (ePnts.empty()) {
+            // 理论上不应发生，但安全起见跳过
+            continue;
+        }
+
+        if (boundary.empty()) {
+            boundary = std::move(ePnts);
+        }
+        else {
+            // 避免重复连接点：如果当前边起点 ≈ 上一段终点，则跳过第一个点
+            auto insertBegin = ePnts.begin();
+            if ((boundary.back() - ePnts.front()).LengthSq() < g_epsilon * g_epsilon) {
+                ++insertBegin;
+            }
+            boundary.insert(boundary.end(), insertBegin, ePnts.end());
+        }
+    }
+
+    return boundary;
 }

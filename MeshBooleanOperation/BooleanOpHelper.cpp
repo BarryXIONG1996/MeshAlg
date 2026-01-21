@@ -111,7 +111,7 @@ void BooleanOpHelper::AddFace(Face* f, TopoTriMesh& M, std::set<Vertex*>& vv, st
     M.fs.push_back(f);
     vf.insert(f);
 
-    Edge* fe = f->e;
+    Edge* fe = f->es[0];
     AddEdge(fe, M, vv, ve);
 
     if (fe->lF == f) {
@@ -145,7 +145,7 @@ void BooleanOpHelper::AddEdge(Edge* e, TopoTriMesh& Mout, std::set<Vertex*>& vvO
 void BooleanOpHelper::AddAdjacentEdges(Face* f, Edge* skipEdge, std::queue<Edge*>& es, std::set<Edge*>& visitedE) {
     if (!f) return;
 
-    Edge* fe = f->e;
+    Edge* fe = f->es[0];
     Edge* edgesToCheck[3];
     edgesToCheck[0] = fe;
     if (fe->lF == f) {

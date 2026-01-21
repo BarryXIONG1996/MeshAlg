@@ -109,6 +109,47 @@ double GeomCalc::Point2PlaneSignDistance(Vec3d const& pnt, Vec3d const& o, Vec3d
     return n.Dot(Vec3d(pnt - o));
 }
 
+std::vector<Vec3d> GeomCalc::OrderPointsOnSegment(
+    const Vec3d& start,
+    const Vec3d& end,
+    const std::vector<Vec3d>& pts)
+{
+    std::vector<Vec3d> result;
+    result.reserve(pts.size() + 2);
+
+    // 添加 start 和 end
+    result.push_back(start);
+    result.push_back(end);
+    result.insert(result.end(), pts.begin(), pts.end());
+
+    // 如果 start == end，直接返回去重点（避免除零）
+    Vec3d dir = end - start;
+    double lenSq = dir.LengthSq();
+    if (lenSq < g_epsilon) {
+        // 所有点重合，返回唯一代表点
+        return { start };
+    }
+
+    // 按照从 start 到 end 的方向参数 t 排序
+    std::sort(result.begin(), result.end(),
+        [&start, &dir, lenSq](const Vec3d& a, const Vec3d& b) {
+            // 计算 t = ((p - start) · dir) / |dir|^2
+            double t_a = (a - start).Dot(dir) / lenSq;
+            double t_b = (b - start).Dot(dir) / lenSq;
+            return t_a < t_b;
+        });
+
+    // 去重
+     std::vector<Vec3d> uniqueResult;
+     uniqueResult.push_back(result[0]);
+     for (size_t i = 1; i < result.size(); ++i) {
+         if ((result[i] - uniqueResult.back()).Length() > g_epsilon) {
+             uniqueResult.push_back(result[i]);
+         }
+     }
+     return uniqueResult;
+}
+
 bool GeomCalc::CalPlanePlaneIntersection(
     Vec3d const& o1, Vec3d const& n1,
     Vec3d const& o2, Vec3d const& n2,

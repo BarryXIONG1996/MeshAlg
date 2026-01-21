@@ -17,6 +17,7 @@ BndBox3d TopoTriMesh::GetBndBox() {
 Face* TopoTriMesh::AddFace2TopoTriMesh(std::vector<Vec3d> const& pnts)
 {
     // 1. 创建或获取顶点 v1, v2, v3
+    if (pnts.size() > 3) return nullptr;
     Vertex* vertices[3] = { nullptr, nullptr, nullptr };
     for (size_t i = 0; i < pnts.size(); ++i) {
         auto it = p2V.find(pnts[i]);
@@ -37,9 +38,8 @@ Face* TopoTriMesh::AddFace2TopoTriMesh(std::vector<Vec3d> const& pnts)
     // 2. 创建或获取边 e1, e2, e3
     auto makeEdgeKey = [](Vertex* a, Vertex* b) -> std::pair<Vertex*, Vertex*> {
         return std::make_pair(std::min(a, b), std::max(a, b));
-        };
+    };
 
-    Edge* edges[3] = { nullptr, nullptr, nullptr };
     std::map<std::pair<Vertex*, Vertex*>, Edge*> edgeMap;
     // 填充 edgeMap
     for (auto& e : es) {
@@ -50,47 +50,44 @@ Face* TopoTriMesh::AddFace2TopoTriMesh(std::vector<Vec3d> const& pnts)
     }
 
     // 构造三条边：v1-v2, v2-v3, v3-v1
+    Face* newF = new Face;
+    newF->topo = this;
+    fs.push_back(newF);
+    for (auto const& pnt : pnts) newF->bbox.Add(pnt);
+
     for (int i = 0; i < 3; ++i) {
         auto key = makeEdgeKey(vertices[i], vertices[(i + 1) % 3]);
         if (edgeMap.count(key)) {
-            edges[i] = edgeMap[key];
-        }
-        else {
+            newF->es[i] = edgeMap[key];
+            newF->reverse[i] = true;
+        } else {
             Edge* newE = new Edge{ vertices[i], vertices[(i + 1) % 3], nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
             es.push_back(newE);
             edgeMap[key] = newE;
-            edges[i] = newE;
+            newF->es[i] = newE;
+            newF->reverse[i] = false;
+            if (!vertices[(i + 1) % 3]->e)
+                vertices[(i + 1) % 3]->e = newE;
         }
     }
 
     // 3. 设置边的拓扑关系
     Vec3d center = (pnts[0] + pnts[1] + pnts[2])/3;
-    Face* newF = new Face{ edges[0] };
-    newF->topo = this;
-    fs.push_back(newF);
-    for (auto const& pnt : pnts) newF->bbox.Add(pnt);
 
     // 设置每条边的 lF, rF, lPE, rPE
     for (int i = 0; i < 3; ++i) {
         int next = (i + 1) % 3;
         int prev = (i - 1 + 3) % 3;
 
-        if (GeomCalc::IsLeft(edges[i]->v1->pnt, edges[i]->v2->pnt, center)) {
-            edges[i]->lF = newF;
-            edges[i]->lPE = edges[prev];
-            edges[i]->lSE = edges[next];
+        if (GeomCalc::IsLeft(newF->es[i]->v1->pnt, newF->es[i]->v2->pnt, center)) {
+            newF->es[i]->lF = newF;
+            newF->es[i]->lPE = newF->es[prev];
+            newF->es[i]->lSE = newF->es[next];
         }
         else {
-            edges[i]->rF = newF;
-            edges[i]->rPE = edges[prev];
-            edges[i]->rSE = edges[next];
-        }
-    }
-
-    // 确保每个顶点至少有一个关联的边
-    for (int i = 0; i < 3; ++i) {
-        if (!vertices[i]->e) {
-            vertices[i]->e = edges[(i - 1 + 3) % 3];
+            newF->es[i]->rF = newF;
+            newF->es[i]->rPE = newF->es[prev];
+            newF->es[i]->rSE = newF->es[next];
         }
     }
 
@@ -108,7 +105,7 @@ void TopoTriMesh::RemoveFace(Face* f)
     };
 
     if (!f) return;
-    Edge* fe = f->e, *pe = nullptr, *se = nullptr;
+    Edge* fe = f->es[0], * pe = nullptr, * se = nullptr;
     if (!fe) return;
     if (fe->lF == f)
     {
@@ -192,9 +189,7 @@ void TopoTriMesh::ReleaseMem()
 void TopoTriMesh::Build(const TriMesh& triMesh) {
     ReleaseMem();
 
-    if (triMesh.indices.empty() || triMesh.points.empty()) {
-        return;
-    }
+    if (triMesh.indices.empty() || triMesh.points.empty()) return;
 
     // --- Step 1: 构建去重顶点 ---
     std::map<Vertex*, int> v2Idx;           // Vertex* -> index in vs
@@ -225,9 +220,8 @@ void TopoTriMesh::Build(const TriMesh& triMesh) {
         // 跳过无效三角形（如索引为0）
         if (triMesh.indices[idx] == 0 ||
             triMesh.indices[idx + 1] == 0 ||
-            triMesh.indices[idx + 2] == 0) {
+            triMesh.indices[idx + 2] == 0)
             continue;
-        }
 
         Face* f = new Face;
         fs.push_back(f);
@@ -249,79 +243,80 @@ void TopoTriMesh::Build(const TriMesh& triMesh) {
         std::pair<int, int> e2_key = { std::min(i1, i2), std::max(i1, i2) };
         std::pair<int, int> e3_key = { std::min(i2, i0), std::max(i2, i0) };
 
-        Edge* tes[3];
         bool isFLeft[3] = { false, false, false };
 
         // --- 处理 e0: (i0, i1) ---
         auto it1 = cEs.find(e1_key);
         if (it1 == cEs.end()) {
             if (GeomCalc::IsLeft(vs[i0]->pnt, vs[i1]->pnt, center))
-            tes[0] = new Edge{ vs[i0], vs[i1], f }, isFLeft[0] = true;
+               f->es[0] = new Edge{ vs[i0], vs[i1], f }, isFLeft[0] = true;
             else
-                tes[0] = new Edge{ vs[i0], vs[i1], nullptr, f };
-
-            es.push_back(tes[0]);
-            cEs[e1_key] = tes[0];
-            if (!vs[i1]->e) vs[i1]->e = tes[0];
+               f->es[0] = new Edge{ vs[i0], vs[i1], nullptr, f };
+            f->reverse[0] = false;
+            es.push_back(f->es[0]);
+            cEs[e1_key] =f->es[0];
+            if (!vs[i1]->e) vs[i1]->e =f->es[0];
         }
         else {
-            tes[0] = it1->second;
-            if (!tes[0]->rF)  // 第二个邻接面
-                tes[0]->rF = f;
+           f->es[0] = it1->second;
+            if (!f->es[0]->rF)  // 第二个邻接面
+               f->es[0]->rF = f;
             else
-                tes[0]->lF = f, isFLeft[0] = true;
+               f->es[0]->lF = f, isFLeft[0] = true;
+            f->reverse[0] = true;
         }
-        f->e = tes[0];
 
         // --- 处理 e1: (i1, i2) ---
         auto it2 = cEs.find(e2_key);
         if (it2 == cEs.end()) {
             if (GeomCalc::IsLeft(vs[i1]->pnt, vs[i2]->pnt, center))
-                tes[1] = new Edge{ vs[i1], vs[i2], f }, isFLeft[1] = true;
+               f->es[1] = new Edge{ vs[i1], vs[i2], f }, isFLeft[1] = true;
             else
-                tes[1] = new Edge{ vs[i1], vs[i2], nullptr, f };
-
-            es.push_back(tes[1]);
-            cEs[e2_key] = tes[1];
-            if (!vs[i2]->e) vs[i2]->e = tes[1];
+               f->es[1] = new Edge{ vs[i1], vs[i2], nullptr, f };
+            f->reverse[1] = false;
+            es.push_back(f->es[1]);
+            cEs[e2_key] =f->es[1];
+            if (!vs[i2]->e) vs[i2]->e =f->es[1];
         }
         else {
-            tes[1] = it2->second;
-            if (!tes[1]->rF)  // 第二个邻接面
-                tes[1]->rF = f;
+           f->es[1] = it2->second;
+            if (!f->es[1]->rF)  // 第二个邻接面
+               f->es[1]->rF = f;
             else
-                tes[1]->lF = f, isFLeft[1] = true;
+               f->es[1]->lF = f, isFLeft[1] = true;
+            f->reverse[1] = true;
         }
 
         // --- 处理 e2: (i2, i0) ---
         auto it3 = cEs.find(e3_key);
         if (it3 == cEs.end()) {
             if (GeomCalc::IsLeft(vs[i2]->pnt, vs[i0]->pnt, center))
-                tes[2] = new Edge{ vs[i2], vs[i0], f }, isFLeft[2] = true;
+               f->es[2] = new Edge{ vs[i2], vs[i0], f }, isFLeft[2] = true;
             else
-                tes[2] = new Edge{ vs[i2], vs[i0], nullptr, f };
-
-            es.push_back(tes[2]);
-            cEs[e3_key] = tes[2];
-            if (!vs[i0]->e) vs[i0]->e = tes[2];
+               f->es[2] = new Edge{ vs[i2], vs[i0], nullptr, f };
+            f->reverse[2] = false;
+            es.push_back(f->es[2]);
+            cEs[e3_key] =f->es[2];
+            if (!vs[i0]->e) vs[i0]->e =f->es[2];
         }
         else {
-            tes[2] = it3->second;
-            if (!tes[2]->rF)  // 第二个邻接面
-                tes[2]->rF = f;
+           f->es[2] = it3->second;
+            if (!f->es[2]->rF)  // 第二个邻接面
+               f->es[2]->rF = f;
             else
-                tes[2]->lF = f, isFLeft[2] = true;
+               f->es[2]->lF = f, isFLeft[2] = true;
+            f->reverse[2] = true;
         }
 
         // --- 设置边的邻接边（绕面顺序）---
         // 对于新边：设置 lPE (left previous edge), lSE (left next edge)
         // 对于已有边：设置 rPE (right previous), rSE (right next)
         for (int i = 0; i < 3; ++i) {
-            Edge* cur = tes[i];
-            Edge* prev = tes[(i - 1 + 3) % 3]; // 前一条边（逆时针）
-            Edge* next = tes[(i + 1) % 3];     // 后一条边
+            Edge* cur =f->es[i];
+            Edge* prev =f->es[(i - 1 + 3) % 3]; // 前一条边（逆时针）
+            Edge* next =f->es[(i + 1) % 3];     // 后一条边
 
-            if (isFLeft[i] = true) {
+            if (isFLeft[i] == true) {
                 // 当前面在边的 "左侧"
                 cur->lPE = prev;
                 cur->lSE = next;
@@ -419,55 +414,33 @@ std::vector<Face*> Vertex::GetAdjacentFaces()
 
 std::vector<Vertex*> Face::getVertices()
 {
-    std::vector<Edge*> es = getEdges();
-    std::vector<Vertex*> pnts;
-    for (auto& e : es)
-    {
-        if (!e) continue;
-        if (e->lF == this)
-            pnts.push_back(e->v1);
+    std::vector<Vertex*> vs;
+    for (int i = 0; i < 3; ++i) {
+        if (reverse[i])
+            vs.push_back(es[i]->v2);
         else
-            pnts.push_back(e->v2);
+            vs.push_back(es[i]->v1);
     }
-    return pnts;
+    return std::move(vs);
 }
 
 std::vector<Edge*> Face::getEdges()
 {
-    std::vector<Edge*> es(3);
-    Edge* fe = e;
-    es[1] = fe;
-    if (!fe) return {};
-    if (fe->lF == this)
-    {
-        if (fe->lPE)
-            es[0] = fe->lPE;
-        if (fe->lSE)
-            es[2] = fe->lSE;
-    }
-    else
-    {
-        if (fe->rPE)
-            es[0] = fe->rPE;
-        if (fe->rSE)
-            es[2] = fe->rSE;
-    }
-    return es;
+    return { es[0], es[1], es[2] };
+}
+
+std::vector<bool> Face::getEdgeDir()
+{
+    return { !reverse[0], !reverse[1], !reverse[2] };
 }
 
 std::vector<Vec3d> Face::getPnts()
 {
-    std::vector<Edge*> es = getEdges();
     std::vector<Vec3d> pnts;
-    for (auto& e : es)
-    {
-        if (!e) continue;
-        if (e->lF == this)
-            pnts.push_back(e->v1->pnt);
-        else
-            pnts.push_back(e->v2->pnt);
-    }
-    return pnts;
+    std::vector<Vertex*> vs = getVertices();
+    for (auto const& v : vs)
+        pnts.push_back(v->pnt);
+    return std::move(pnts);
 }
 
 std::vector<Vec3d> Edge::getPnts(bool left)

@@ -16,6 +16,12 @@ struct MESHMODELDLL GeomCalc
     static double Point2PlaneDistatnce(Vec3d const& pnt, Vec3d const& o, Vec3d const& n);
     static double Point2PlaneSignDistance(Vec3d const& pnt, Vec3d const& o, Vec3d const& n);
 
+    // 输出线段上的有序点
+    static std::vector<Vec3d> OrderPointsOnSegment(
+        const Vec3d& start,
+        const Vec3d& end,
+        const std::vector<Vec3d>& pts);
+
     // 计算面面交线
     static bool CalPlanePlaneIntersection(Vec3d const& o1, Vec3d const& dir1, Vec3d const& o2, Vec3d const& dir2, Vec3d& intO, Vec3d& intDir);
 

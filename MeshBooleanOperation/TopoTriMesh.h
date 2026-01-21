@@ -26,12 +26,14 @@ struct Edge {
 
 struct TopoTriMesh;
 struct Face {
-    Edge* e;        // »Œ“ª±ﬂ
+    Edge* es[3];
+    bool reverse[3];
     BndBox3d bbox;
     TopoTriMesh* topo;
 
     std::vector<Vertex*> getVertices();
     std::vector<Edge*> getEdges();
+    std::vector<bool> getEdgeDir();
     std::vector<Vec3d> getPnts();
 };
 

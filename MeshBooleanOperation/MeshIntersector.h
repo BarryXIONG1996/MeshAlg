@@ -22,8 +22,10 @@ private:
     std::vector<Vec3d> EdgeEdgeInt(Edge* e1, Edge* e2); // 返回值数组大小：0-没有交点,1-一个交点,2-重叠
     void FaceFaceInt(Face* f1, Face* f2, std::function<void(Face*, Face*)> intersectFunc, bool coPlanar);
     void CoPlanarFaceInt(Face* f1, Face* f2);
+    void ProcessCoPlanarIntersectResult();
     void NonCoPlanarFaceInt(Face* f1, Face* f2);
-
+    void ProcessNonCoPlanarIntersectResult();
+    std::vector<Vec3d> ExtractOrderedBoundary(Face* f);
 private:
     TopoTriMesh& m_mesh1;
     TopoTriMesh& m_mesh2;
@@ -32,8 +34,10 @@ private:
     std::map<std::pair<Edge*, Face*>, std::set<int>> m_ef2Int; // 边面对:交点
     std::map<Face*, std::set<int>> m_face2Segs; // 面:交线
     std::map<Edge*, std::set<int>> m_edge2Ints; // 边:边内交点
+    std::map<Edge*, std::set<std::pair<int, int>>> m_edge2CoPlanarInts; // 边:边内交点（共面）
     std::vector<Vec3d> m_intersectPnts; // 交点
     std::vector<double> m_weights; // 交点权重
     std::vector<std::pair<int, int>> m_intSegs; // 交线
+    std::vector<std::vector<Vec3d>> m_coPlanarIntSegs; // 共面交线
     std::shared_ptr<SpatialAccelerator> m_accelerator;
 };

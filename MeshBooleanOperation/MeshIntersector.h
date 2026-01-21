@@ -38,6 +38,6 @@ private:
     std::vector<Vec3d> m_intersectPnts; // 交点
     std::vector<double> m_weights; // 交点权重
     std::vector<std::pair<int, int>> m_intSegs; // 交线
-    std::vector<std::vector<Vec3d>> m_coPlanarIntSegs; // 共面交线
+    std::vector<std::vector<Vec3d>> m_coPlanarIntSegs; // 共面交线（法向与m_mesh1保持一致）
     std::shared_ptr<SpatialAccelerator> m_accelerator;
 };

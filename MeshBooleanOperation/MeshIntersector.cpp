@@ -328,15 +328,11 @@ void MeshIntersector::ProcessCoPlanarIntersectResult()
     // 重新三角化待删除的面
     std::vector<std::vector<Vec3d>> reTris1, reTris2;
     for (auto const& f : rmFaces) {
-        std::vector<std::vector<Vec3d>> bnds = { ExtractOrderedBoundary(f) };
+        std::vector<Vec3d> bnd = ExtractOrderedBoundary(f);
+        std::vector<std::vector<Vec3d>> coPlanarIntSegs;
         if (m_face2Segs.count(f)) {
             for (auto const& seg : m_face2Segs.at(f)) {
-                std::vector<Vec3d> cPIntS =  m_coPlanarIntSegs.at(seg);
-                for (auto bnd : bnds) {
-                    std::vector<std::vector<Vec3d>> tri1OutTri2, tri2OutTri1;
-                    std::vector<Vec3d> tri1CollapseTri2;
-                    GeomCalc::TriRegionSplit(bnd, cPIntS, tri1OutTri2, tri2OutTri1, tri1CollapseTri2);
-                }
+                coPlanarIntSegs.push_back(m_coPlanarIntSegs.at(seg));
             }
         }
         std::vector<std::vector<Vec3d>> tris = GeomCalc::TriangulateWithConstraints(boundary, intSegs);

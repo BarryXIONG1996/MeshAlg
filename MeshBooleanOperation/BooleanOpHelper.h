@@ -3,6 +3,8 @@
 #include <set>
 #include <queue>
 
+/*Note: 注意修改工具集的面片法向*/
+
 // 布尔运算后，未使用的拓扑会被释放
 class BooleanOpHelper
 {

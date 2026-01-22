@@ -256,7 +256,17 @@ bool GeomCalc::linePlaneIntersect(
     return true;
 }
 
-
+// 辅助：计算多边形有向面积（2D）
+static double SignedArea(const PathD& p) {
+    if (p.size() < 3) return 0.0;
+    double area = 0.0;
+    size_t n = p.size();
+    for (size_t i = 0; i < n; ++i) {
+        size_t j = (i + 1) % n;
+        area += p[i].x * p[j].y - p[j].x * p[i].y;
+    }
+    return area * 0.5;
+};
 
 // 主函数：多边形求交（共面假设）
 bool GeomCalc::PolyIntersect(
@@ -264,18 +274,6 @@ bool GeomCalc::PolyIntersect(
     const std::vector<Vec3d>& poly2,
     std::vector<Vec3d>& outIntersection)
 {
-    // 辅助：计算多边形有向面积（2D）
-    auto SignedArea = [](const PathD& p) {
-        if (p.size() < 3) return 0.0;
-        double area = 0.0;
-        size_t n = p.size();
-        for (size_t i = 0; i < n; ++i) {
-            size_t j = (i + 1) % n;
-            area += p[i].x * p[j].y - p[j].x * p[i].y;
-        }
-        return area * 0.5;
-    };
-
     const double eps = g_epsilon;
     const double epsSq = eps * eps;
     outIntersection.clear();
@@ -286,26 +284,12 @@ bool GeomCalc::PolyIntersect(
 
     // === 1. 用 poly1 计算参考法向和平面 ===
     Vec3d origin = poly1[0];
-    Vec3d normalSum{ 0, 0, 0 };
-    bool hasValidNormal = false;
-
     // 遍历 poly1 的连续三角形扇区，累加法向
-    for (size_t i = 1; i + 1 < poly1.size(); ++i) {
-        Vec3d e1 = poly1[i] - poly1[0];
-        Vec3d e2 = poly1[i + 1] - poly1[0];
-        Vec3d n = e1.Cross(e2);
-        if (n.LengthSq() > epsSq) {
-            normalSum = normalSum + n;
-            hasValidNormal = true;
-        }
-    }
-
-    if (!hasValidNormal || normalSum.LengthSq() < epsSq) {
+    Vec3d refNormal = CompuateNormal(poly1);
+    if (refNormal.LengthSq() < epsSq) {
         // poly1 退化（共线或点）
         return true;
     }
-
-    Vec3d refNormal = normalSum.Normalization();
 
     // === 2. 构建局部坐标系 ===
     Vec3d arbitrary = (std::abs(refNormal.x) < 0.9) ? Vec3d{ 1, 0, 0 } : Vec3d{ 0, 1, 0 };
@@ -624,4 +608,162 @@ bool GeomCalc::PolyIntersect(
         }
 
         return result;
+    }
+
+    // 主函数
+    bool GeomCalc::TriangulateWithHoles(
+        const std::vector<Vec3d>& bnd,
+        const std::vector<std::vector<Vec3d>>& holes,
+        std::vector<std::vector<Vec3d>>& outTriangles)
+    {
+        const double eps = g_epsilon;
+        const double epsSq = eps * eps;
+        outTriangles.clear();
+
+        if (bnd.size() < 3) return false;
+
+        // === 1. 用 bnd 拟合平面 ===
+        Vec3d origin{ 0, 0, 0 };
+        for (const auto& p : bnd) {
+            origin = origin + p;
+        }
+        origin = origin * (1.0 / static_cast<double>(bnd.size()));
+        Vec3d refNormal = CompuateNormal(bnd);
+
+        // === 2. 构建局部坐标系 ===
+        Vec3d arbitrary = (std::abs(refNormal.x) < 0.9) ? Vec3d{ 1, 0, 0 } : Vec3d{ 0, 1, 0 };
+        Vec3d x_axis = refNormal.Cross(arbitrary);
+        if (x_axis.LengthSq() < epsSq) {
+            arbitrary = Vec3d{ 0, 0, 1 };
+            x_axis = refNormal.Cross(arbitrary);
+        }
+        x_axis = x_axis.Normalization();
+        Vec3d y_axis = refNormal.Cross(x_axis);
+
+        // === 3. 投影函数 ===
+        auto to2D = [&](const Vec3d& p) -> PointD {
+            Vec3d rel = p - origin;
+            return PointD(rel.Dot(x_axis), rel.Dot(y_axis));
+            };
+
+        auto to3D = [&](const PointD& pt) -> Vec3d {
+            return origin + x_axis * pt.x + y_axis * pt.y;
+            };
+
+        // === 4. 投影外轮廓并转为 CCW ===
+        PathD outer = [&]() {
+            PathD p;
+            p.reserve(bnd.size());
+            for (const auto& v : bnd) p.push_back(to2D(v));
+            if (SignedArea(p) < 0) std::reverse(p.begin(), p.end());
+            return p;
+            }();
+
+        // === 5. 投影洞，并转为 CW（相对于 outer 的 CCW）===
+        PathsD innerPaths;
+        for (const auto& hole : holes) {
+            if (hole.size() < 3) continue;
+            PathD h;
+            h.reserve(hole.size());
+            for (const auto& v : hole) h.push_back(to2D(v));
+            // 洞应为 CW（即面积 < 0），若不是则反转
+            if (SignedArea(h) > 0) std::reverse(h.begin(), h.end());
+            innerPaths.push_back(h);
+        }
+
+        // === 6. 使用 Clipper2 执行布尔差集：outer \ union(holes) ===
+        PathsD subjects = { outer };
+        PathsD clips = innerPaths;
+
+        // 先对 holes 做 Union（避免重叠洞导致问题）
+        if (!clips.empty()) {
+            clips = Union(clips, FillRule::EvenOdd);
+        }
+
+        PathsD diff;
+        if (clips.empty()) {
+            diff = subjects;
+        }
+        else {
+            diff = Difference(subjects, clips, FillRule::EvenOdd);
+        }
+
+        if (diff.empty()) {
+            return true; // 无剩余区域
+        }
+
+        // === 7. 提取所有环（外环+内环）用于 CDT ===
+        // CDT 要求：顶点列表 + 约束边（包括外环和内环的边）
+        std::vector<CDT::V2d<double>> cdtVertices;
+        std::vector<CDT::Edge> cdtEdges;
+
+        // 映射：2D点 -> 顶点索引（去重）
+        struct  PDCompare {
+            bool operator()(const PointD& pd1, const PointD& pd2) const {
+                if (std::fabs(pd1.x - pd2.x) > g_epsilon)
+                    return pd1.x < pd2.x;
+                if (std::fabs(pd1.y - pd2.y) > g_epsilon)
+                    return pd1.y < pd2.y;
+                return false;
+            }
+        };
+        std::map<PointD, std::size_t, PDCompare> pointToIndex;
+
+        auto addPathToCDT = [&](const PathD& path) {
+            if (path.size() < 3) return;
+            std::vector<std::size_t> indices;
+            for (const auto& pt : path) {
+                auto it = pointToIndex.find(pt);
+                if (it == pointToIndex.end()) {
+                    std::size_t idx = cdtVertices.size();
+                    cdtVertices.emplace_back(pt.x, pt.y);
+                    pointToIndex[pt] = idx;
+                    indices.push_back(idx);
+                }
+                else {
+                    indices.push_back(it->second);
+                }
+            }
+            // 添加约束边（闭合）
+            for (size_t i = 0; i < indices.size(); ++i) {
+                std::size_t j = (i + 1) % indices.size();
+                cdtEdges.emplace_back(static_cast<CDT::VertInd>(indices[i]),
+                    static_cast<CDT::VertInd>(indices[j]));
+            }
+            };
+
+        for (const auto& poly : diff) {
+            addPathToCDT(poly);
+        }
+
+        if (cdtVertices.empty()) return true;
+
+        // === 8. 执行 CDT 三角化 ===
+        CDT::Triangulation<double> cdt;
+        cdt.insertVertices(cdtVertices);
+        cdt.insertEdges(cdtEdges);
+        cdt.eraseOuterTrianglesAndHoles();
+
+        // === 9. 转换回 3D，并校正法向 ===
+        outTriangles.clear();
+        for (const auto& tri : cdt.triangles) {
+            if (tri.vertices[0] == tri.vertices[1] ||
+                tri.vertices[1] == tri.vertices[2] ||
+                tri.vertices[0] == tri.vertices[2]) continue;
+
+            Vec3d v0 = to3D(PointD(cdtVertices[tri.vertices[0]].x, cdtVertices[tri.vertices[0]].y));
+            Vec3d v1 = to3D(PointD(cdtVertices[tri.vertices[1]].x, cdtVertices[tri.vertices[1]].y));
+            Vec3d v2 = to3D(PointD(cdtVertices[tri.vertices[2]].x, cdtVertices[tri.vertices[2]].y));
+
+            // 检查法向
+            Vec3d n = (v1 - v0).Cross(v2 - v0);
+            if (n.Dot(refNormal) < 0) {
+                // 反转顺序
+                std::swap(v1, v2);
+            }
+
+            outTriangles.push_back({ v0, v1, v2 });
+        }
+
+        return true;
     }

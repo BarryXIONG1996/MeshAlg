@@ -17,8 +17,8 @@ struct Vertex {
 struct Face;
 struct Edge {
     Vertex* v1, * v2;
-    Face* lF, * rF;  // 左右面
-    Edge* lPE, * lSE, * rPE, * rSE; // 翼边结构
+    Face* lF, * rF;  // (前进方向的)左右面
+    Edge* lPE, * lSE, * rPE, * rSE; // (法线方向的)前后边
     bool isInner;
 
     std::vector<Vec3d> getPnts(bool left = true);

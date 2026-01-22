@@ -335,7 +335,9 @@ void MeshIntersector::ProcessCoPlanarIntersectResult()
                 coPlanarIntSegs.push_back(m_coPlanarIntSegs.at(seg));
             }
         }
-        std::vector<std::vector<Vec3d>> tris = GeomCalc::TriangulateWithConstraints(boundary, intSegs);
+        std::vector<std::vector<Vec3d>> tris;
+        if (!GeomCalc::TriangulateWithHoles(bnd, coPlanarIntSegs, tris))
+            continue;
         if (f->topo == &m_mesh1)
             reTris1.insert(reTris1.end(), tris.begin(), tris.end());
         if (f->topo == &m_mesh2)
@@ -359,92 +361,16 @@ void MeshIntersector::ProcessCoPlanarIntersectResult()
     for (auto& tri : reTris1) m_mesh1.AddFace2TopoTriMesh(tri);
     for (auto& tri : reTris2) m_mesh2.AddFace2TopoTriMesh(tri);
     
+    for (auto& cPIntSeg : m_coPlanarIntSegs) {
+        std::vector<std::vector<Vec3d>> tris = GeomCalc::Triangulate(cPIntSeg);
+        for (auto const& tri : tris)
+            m_coPlanes.AddFace2TopoTriMesh(tri);
+    }
+
     // 清理数据
     m_face2Segs.clear();
     m_coPlanarIntSegs.clear();
     m_edge2CoPlanarInts.clear();
-#if 0
-    auto edges1 = f1->getEdges();
-    auto edges2 = f2->getEdges();
-
-    // 获取边上交点，用于后续获取异侧面
-    std::map<Edge*, std::vector<std::pair<Vec3d, double>>> e2Pts1, e2Pts2;
-    for (const Vec3d& pt : tri12Int) {
-        for (Edge* e : edges1) {
-            double t = 0.0;
-            if (GeomCalc::IsPointOnSegment(pt, e->v1->pnt, e->v2->pnt, t) &&
-                t > g_epsilon && t < 1 - g_epsilon) {
-                e2Pts1[e].push_back({ pt, t });
-                break;
-            }
-        }
-        for (Edge* e : edges2) {
-            double t = 0.0;
-            if (GeomCalc::IsPointOnSegment(pt, e->v1->pnt, e->v2->pnt, t) &&
-                t > g_epsilon && t < 1 - g_epsilon) {
-                e2Pts2[e].push_back({ pt, t });
-                break;
-            }
-        }
-    }
-
-    std::vector<std::vector<Vec3d>> poly1s = std::move(tri1Out2);
-    std::vector<std::vector<Vec3d>> poly2s = std::move(tri2Out1);
-
-    for (auto& e : e2Pts1) {
-        Face* cF = (e.first->lF == f1) ? e.first->rF : e.first->lF;
-        if (cF) {
-            std::vector<Vec3d> newPoly = BuildPolygonWithEdgePoints(cF, e.first, e.second);
-            poly1s.push_back(std::move(newPoly));
-        }
-        m_mesh1.RemoveFace(cF);
-    }
-    m_mesh1.RemoveFace(f1);
-    for (auto& e : e2Pts1) m_mesh1.RemoveEdge(e.first);
-
-    for (auto& e : e2Pts2) {
-        Face* cF = (e.first->lF == f2) ? e.first->rF : e.first->lF;
-        if (cF) {
-            std::vector<Vec3d> newPoly = BuildPolygonWithEdgePoints(cF, e.first, e.second);
-            poly2s.push_back(std::move(newPoly));
-        }
-        m_mesh2.RemoveFace(cF);
-        m_accelerator->Remove(cF);
-    }
-    m_mesh2.RemoveFace(f2);
-    m_accelerator->Remove(f2);
-    for (auto& e : e2Pts2) m_mesh2.RemoveEdge(e.first);
-
-    for (auto const& poly : poly1s)
-    {
-        std::vector<std::vector<Vec3d>> tris = GeomCalc::Triangulate(poly);
-        for (auto const& tri : tris)
-            m_mesh1.AddFace2TopoTriMesh(tri);
-    }
-
-    for (auto const& poly : poly2s)
-    {
-        std::vector<std::vector<Vec3d>> tris = GeomCalc::Triangulate(poly);
-        for (auto const& tri : tris)
-        {
-            Face* newF = m_mesh2.AddFace2TopoTriMesh(tri);
-            m_accelerator->Build({ newF });
-        }
-    }
-
-    std::vector<std::vector<Vec3d>> tris = GeomCalc::Triangulate(tri12Int);
-    for (auto const& tri : tris)
-        m_coPlanes.AddFace2TopoTriMesh(tri);
-
-    TriMesh t, o, co;
-    m_mesh1.ToMesh(o);
-    m_mesh2.ToMesh(t);
-    m_coPlanes.ToMesh(co);
-
-    ShowTriMesh(o);
-    ShowTriMesh(t);
-    ShowTriMesh(co);
-#endif
 }
 
 enum TopoType { EdgeType, VertexType };

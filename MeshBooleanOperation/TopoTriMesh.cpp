@@ -105,20 +105,7 @@ void TopoTriMesh::RemoveFace(Face* f)
     };
 
     if (!f) return;
-    Edge* fe = f->es[0], * pe = nullptr, * se = nullptr;
-    if (!fe) return;
-    if (fe->lF == f)
-    {
-        fe->lF = nullptr;
-        pe = fe->lPE, se = fe->lSE;
-    }
-    else if (fe->rF == f)
-    {
-        fe->rF = nullptr;
-        pe = fe->rPE, se = fe->rSE;
-    }
-    RmEdgeFaceRel(pe);
-    RmEdgeFaceRel(se);
+    for (Edge* e : f->es)   RmEdgeFaceRel(e);
 
     auto newEnd = std::remove_if(fs.begin(), fs.end(), [&](Face* rmF) { return rmF == f; });
     fs.erase(newEnd, fs.end());
@@ -134,6 +121,7 @@ void TopoTriMesh::RemoveEdge(Edge* e)
         // 如果该顶点只连着这条边（即移除后孤立），则删除顶点
         if (adjEs.size() == 1 && adjEs[0] == e) {
             vs.erase(std::remove(vs.begin(), vs.end(), v), vs.end());
+            p2V.erase(v->pnt);
         }
         // 清理其他相邻边中指向 e 的拓扑指针
         for (Edge* adj : adjEs) {

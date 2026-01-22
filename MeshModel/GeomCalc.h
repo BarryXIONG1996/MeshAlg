@@ -49,4 +49,10 @@ struct MESHMODELDLL GeomCalc
     static std::vector<std::vector<Vec3d>> TriangulateWithConstraints(
         const std::vector<Vec3d>& outerBoundary,
         const std::vector<std::vector<Vec3d>>& intersectionPolylines);
+
+    // 对内外环多边形进行三角化
+    static bool TriangulateWithHoles(
+        const std::vector<Vec3d>& bnd,
+        const std::vector<std::vector<Vec3d>>& holes,
+        std::vector<std::vector<Vec3d>>& outTriangles); // 每个元素是三角形（3点）
 };

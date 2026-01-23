@@ -62,10 +62,11 @@ void BooleanOpHelper::BFSExtractRegion(const TopoTriMesh& mesh, TopoTriMesh& Mou
     // 初始化：从 posTag == 2 (Out) 的顶点出发
     for (auto* v : mesh.vs) {
         if (v && v->posTag == 2) {
-            Edge* e = v->e;
-            if (e && visitedE.find(e) == visitedE.end()) {
-                es.push(e);
-                visitedE.insert(e);
+            for (Edge* e : v->es) {
+                if (e && visitedE.find(e) == visitedE.end()) {
+                    es.push(e);
+                    visitedE.insert(e);
+                }
             }
         }
     }
@@ -189,13 +190,11 @@ void BooleanOpHelper::CombineTopoTriMesh(TopoTriMesh& M, std::vector<TopoTriMesh
     }
 }
 
-void BooleanOpHelper::ReleaseMeshExceptBoundary(TopoTriMesh& M)
-{
+void BooleanOpHelper::ReleaseMeshExceptBoundary(TopoTriMesh& M) {
     // 遍历M
     std::set<Face*> fs;
     std::set<Edge*> es, esOn;
-    for (auto& f : M.fs)
-    {
+    for (auto& f : M.fs) {
         if (!f) continue;
         fs.insert(f);
     }
@@ -210,18 +209,13 @@ void BooleanOpHelper::ReleaseMeshExceptBoundary(TopoTriMesh& M)
     }
 
     // 解除顶点联系
-    for (auto& v : M.vs)
-    {
-        if (!v || v->posTag != 3 || !es.count(v->e)) continue;
+    for (auto& v : M.vs) {
+        if (!v || v->posTag != 3) continue;
         // 获取与v相连的所有边
         std::vector<Edge*> cEdges = v->GetAdjacentEdges();
-        for (auto& ce : cEdges)
-        {
-            if (ce->v2 == v && !es.count(ce))
-            {
-                v->e = ce;
-                break;
-            }
+        for (auto& ce : cEdges) {
+            if (es.count(ce))
+                v->es.erase(ce);
         }
     }
 

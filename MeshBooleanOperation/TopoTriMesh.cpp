@@ -25,7 +25,7 @@ Face* TopoTriMesh::AddFace2TopoTriMesh(std::vector<Vec3d> const& pnts)
             vertices[i] = it->second;
         }
         else {
-            Vertex* newV = new Vertex{ pnts[i], nullptr, 0 };
+            Vertex* newV = new Vertex{ pnts[i], {}, 0 };
             vs.push_back(newV);
             p2V[pnts[i]] = newV;
             vertices[i] = newV;
@@ -66,8 +66,8 @@ Face* TopoTriMesh::AddFace2TopoTriMesh(std::vector<Vec3d> const& pnts)
             edgeMap[key] = newE;
             newF->es[i] = newE;
             newF->reverse[i] = false;
-            if (!vertices[(i + 1) % 3]->e)
-                vertices[(i + 1) % 3]->e = newE;
+            vertices[i]->es.insert(newE);
+            vertices[(i + 1) % 3]->es.insert(newE);
         }
     }
 
@@ -122,6 +122,8 @@ void TopoTriMesh::RemoveEdge(Edge* e)
         if (adjEs.size() == 1 && adjEs[0] == e) {
             vs.erase(std::remove(vs.begin(), vs.end(), v), vs.end());
             p2V.erase(v->pnt);
+            delete v;
+            return;
         }
         // 清理其他相邻边中指向 e 的拓扑指针
         for (Edge* adj : adjEs) {
@@ -131,14 +133,7 @@ void TopoTriMesh::RemoveEdge(Edge* e)
             if (adj->rPE == e) adj->rPE = nullptr;
             if (adj->rSE == e) adj->rSE = nullptr;
         }
-        if (v->e == e) {
-            for (Edge* adj : adjEs) {
-                if (adj == e || adj->v2 != v)
-                    continue;
-                v->e = adj;
-                break;
-            }
-        }
+        v->es.erase(e);
     };
 
     cleanVertex(e->v1);
@@ -243,7 +238,8 @@ void TopoTriMesh::Build(const TriMesh& triMesh) {
             f->reverse[0] = false;
             es.push_back(f->es[0]);
             cEs[e1_key] =f->es[0];
-            if (!vs[i1]->e) vs[i1]->e =f->es[0];
+            vs[i0]->es.insert(f->es[0]);
+            vs[i1]->es.insert(f->es[0]);
         }
         else {
            f->es[0] = it1->second;
@@ -264,7 +260,8 @@ void TopoTriMesh::Build(const TriMesh& triMesh) {
             f->reverse[1] = false;
             es.push_back(f->es[1]);
             cEs[e2_key] =f->es[1];
-            if (!vs[i2]->e) vs[i2]->e =f->es[1];
+            vs[i1]->es.insert(f->es[1]);
+            vs[i2]->es.insert(f->es[1]);
         }
         else {
            f->es[1] = it2->second;
@@ -285,7 +282,8 @@ void TopoTriMesh::Build(const TriMesh& triMesh) {
             f->reverse[2] = false;
             es.push_back(f->es[2]);
             cEs[e3_key] =f->es[2];
-            if (!vs[i0]->e) vs[i0]->e =f->es[2];
+            vs[i2]->es.insert(f->es[2]);
+            vs[i0]->es.insert(f->es[2]);
         }
         else {
            f->es[2] = it3->second;
@@ -362,38 +360,14 @@ void TopoTriMesh::ToMesh(TriMesh& mesh)
 
 std::vector<Edge*> Vertex::GetAdjacentEdges()
 {
-    if (!e) return {};
-
-    std::vector<Edge*> cEdges;
-    Edge* curEdge = e;
-
-    // 保存初始边，防止无限循环
-    Edge* startEdge = curEdge;
-
-    do {
-        cEdges.push_back(curEdge);
-
-        // 根据 curEdge 是否以 v 为起点或终点，决定使用 lSE 或 rSE
-        if (curEdge->v2 == this) {  // curEdge 的终点是 v → 使用 lSE
-            curEdge = curEdge->lSE;
-        }
-        else if (curEdge->v1 == this) {  // curEdge 的起点是 v → 使用 rSE
-            curEdge = curEdge->rSE;
-        }
-        else {
-            // 理论上不会发生，但为了安全
-            break;
-        }
-
-    } while (curEdge && curEdge != startEdge);
-
-    return cEdges;
+    return { es.begin(), es.end() };
 }
 
 std::vector<Face*> Vertex::GetAdjacentFaces()
 {
     std::set<Face*> faces;
     for (Edge* e : GetAdjacentEdges()) {
+        if (!e) continue;
         if (e->lF) faces.insert(e->lF);
         if (e->rF) faces.insert(e->rF);
     }

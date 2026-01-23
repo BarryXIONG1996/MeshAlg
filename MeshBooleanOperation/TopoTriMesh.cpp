@@ -59,7 +59,12 @@ Face* TopoTriMesh::AddFace2TopoTriMesh(std::vector<Vec3d> const& pnts)
         auto key = makeEdgeKey(vertices[i], vertices[(i + 1) % 3]);
         if (edgeMap.count(key)) {
             newF->es[i] = edgeMap[key];
-            newF->reverse[i] = true;
+            // 不是所有已有边都需要反向
+            Edge* ee = edgeMap.at(key);
+            if (ee->v1 != vertices[i])
+                newF->reverse[i] = true;
+            else
+                newF->reverse[i] = false;
         } else {
             Edge* newE = new Edge{ vertices[i], vertices[(i + 1) % 3], nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
             es.push_back(newE);

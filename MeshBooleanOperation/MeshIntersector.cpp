@@ -344,6 +344,10 @@ void MeshIntersector::ProcessCoPlanarIntersectResult()
             reTris2.insert(reTris2.end(), tris.begin(), tris.end());
     }
 
+    TriMesh m1, m2;
+    m_mesh1.ToMesh(m1);
+    m_mesh2.ToMesh(m2);
+
     for (auto& f : rmFaces) {
         if (f->topo == &m_mesh1) m_mesh1.RemoveFace(f);
         else m_mesh2.RemoveFace(f);
@@ -351,10 +355,19 @@ void MeshIntersector::ProcessCoPlanarIntersectResult()
     }
     for (auto& e : rmEdges1) {
         m_mesh1.RemoveEdge(e);
+        if (m_mesh1.p2V.count(e->v1->pnt)) {
+
+            e->v1->posTag;
+        }
+        if (m_mesh1.p2V.count(e->v2->pnt)) {}
+
         if (e) delete e;
     };
     for (auto& e : rmEdges2) {
         m_mesh2.RemoveEdge(e);
+        if (m_mesh2.p2V.count(e->v1->pnt)) {}
+
+        if (m_mesh2.p2V.count(e->v2->pnt)) {}
         if (e) delete e;
     };
 

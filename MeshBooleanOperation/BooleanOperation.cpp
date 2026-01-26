@@ -32,7 +32,6 @@ extern void ShowTriMesh(const TriMesh& mesh);
     m_obj->ToMesh(o);
     m_sub->ToMesh(t);
     coPlanes.ToMesh(co);
-
     ShowTriMesh(o);
     ShowTriMesh(t);
     ShowTriMesh(co);
@@ -42,6 +41,12 @@ extern void ShowTriMesh(const TriMesh& mesh);
     BooleanOpHelper boolHelper(*m_obj, *m_sub, coPlanes, m_opType);
     if (!boolHelper.Execute(res))
         return false;
+
+#ifdef _DEBUG
+    TriMesh re;
+    res.ToMesh(re);
+    ShowTriMesh(re);
+#endif
 
     return true;
 }

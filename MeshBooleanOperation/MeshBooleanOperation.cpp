@@ -212,7 +212,7 @@ void ShowTriMesh(const TriMesh& mesh)
 
 int main() {
     TriMesh mesh1, mesh2;
-#if 0 // 面片共面情况调试
+#if 0 // 平面共面情况调试
     mesh1.points = {
         {-1,-1,0},{-1,1,0},{1,1,0},{1,-1,0}
     };
@@ -224,7 +224,7 @@ int main() {
     mesh2.indices = { 1,2,3, 0, 1,3,4, 0 };
 #endif
 
-#if 1 // 面片相交情况调试
+#if 0 // 平面相交情况调试
     mesh1.points = {
         {-1,-1,0},{-1,1,0},{1,1,0},{1,-1,0}
     };
@@ -232,6 +232,14 @@ int main() {
 
     mesh2.points = {
         {-1,0,-1},{-1,0,1},{1,0,1},{1,0,-1}
+    };
+    mesh2.indices = { 1,2,3, 0, 1,3,4, 0 };
+#endif
+
+#if 1 // 平面，立方体相交情况调试
+    AddCube(mesh1, 0, 0, 0, 2);
+    mesh2.points = {
+        {-1,-1,0},{-1,1,0},{1,1,0},{1,-1,0}
     };
     mesh2.indices = { 1,2,3, 0, 1,3,4, 0 };
 #endif

@@ -101,6 +101,7 @@ void BooleanOpHelper::BFSExtractRegion(const TopoTriMesh& mesh, TopoTriMesh& Mou
         // ON 顶点（posTag==3）强制加入 Min ← 修改(3)
         if (vvOut.find(v) == vvOut.end() || v->posTag == 3) {
             Min.vs.push_back(v);
+            Min.p2V[v->pnt] = v;
         }
     }
 }

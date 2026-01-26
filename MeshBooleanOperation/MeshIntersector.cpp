@@ -502,7 +502,8 @@ static std::pair<int, std::set<std::pair<Edge*, Face*>>> BuildEfsForFaceIntersec
     const IntersectionInfo& info, 
     Face* faceOnOtherSide, 
     Vec3d const& oOtherSide, 
-    Vec3d const& nOtherSide
+    Vec3d const& nOtherSide,
+    double baseW
 )
 {
     std::set<std::pair<Edge*, Face*>> efs;
@@ -599,13 +600,19 @@ void MeshIntersector::NonCoPlanarFaceInt(Face* f1, Face* f2)
         intPnts.push_back(intO + intDir * p1_start.param);
     }
     else if (p1_start.param < p2_start.param) {
-        auto [w, efs] = BuildEfsForFaceIntersect(p2_start, f1, o1, norm1);
+        double baseW = 0.0;
+        if (p1_start.type == p1_end.type && p1_start.type == TopoType::VertexType) // 此时穿过f1的边
+            baseW = 1.0;
+        auto [w, efs] = BuildEfsForFaceIntersect(p2_start, f1, o1, norm1, baseW);
         weights.push_back(w);
         allEfs.push_back(efs);
         intPnts.push_back(intO + intDir * p2_start.param);
     }
     else {
-        auto [w, efs] = BuildEfsForFaceIntersect(p1_start, f2, o2, norm2);
+        double baseW = 0.0;
+        if (p2_start.type == p2_end.type && p2_start.type == TopoType::VertexType)
+            baseW = 1.0;
+        auto [w, efs] = BuildEfsForFaceIntersect(p1_start, f2, o2, norm2, baseW);
         weights.push_back(w);
         allEfs.push_back(efs);
         intPnts.push_back(intO + intDir * p1_start.param);
@@ -619,13 +626,19 @@ void MeshIntersector::NonCoPlanarFaceInt(Face* f1, Face* f2)
         intPnts.push_back(intO + intDir * p1_end.param);
     }
     else if (p2_end.param < p1_end.param) {
-        auto [w, efs] = BuildEfsForFaceIntersect(p2_end, f1, o1, norm1);
+        double baseW = 0.0;
+        if (p1_start.type == p1_end.type && p1_start.type == TopoType::VertexType)
+            baseW = 1.0;
+        auto [w, efs] = BuildEfsForFaceIntersect(p2_end, f1, o1, norm1, baseW);
         weights.push_back(w);
         allEfs.push_back(efs);
         intPnts.push_back(intO + intDir * p2_end.param);
     }
     else {
-        auto [w, efs] = BuildEfsForFaceIntersect(p1_end, f2, o2, norm2);
+        double baseW = 0.0;
+        if (p2_start.type == p2_end.type && p2_start.type == TopoType::VertexType)
+            baseW = 1.0;
+        auto [w, efs] = BuildEfsForFaceIntersect(p1_end, f2, o2, norm2, baseW);
         weights.push_back(w);
         allEfs.push_back(efs);
         intPnts.push_back(intO + intDir * p1_end.param);

@@ -134,10 +134,12 @@ void BooleanOpHelper::AddEdge(Edge* e, TopoTriMesh& Mout, std::set<Vertex*>& vvO
 
     if (e->v1 && vvOut.find(e->v1) == vvOut.end()) {
         Mout.vs.push_back(e->v1);
+        Mout.p2V[e->v1->pnt] = e->v1;
         vvOut.insert(e->v1);
     }
     if (e->v2 && vvOut.find(e->v2) == vvOut.end()) {
         Mout.vs.push_back(e->v2);
+        Mout.p2V[e->v2->pnt] = e->v2;
         vvOut.insert(e->v2);
     }
 }

@@ -371,8 +371,20 @@ void MeshIntersector::ProcessCoPlanarIntersectResult()
         if (e) delete e;
     };
 
-    for (auto& tri : reTris1) m_mesh1.AddFace2TopoTriMesh(tri);
-    for (auto& tri : reTris2) m_mesh2.AddFace2TopoTriMesh(tri);
+    for (auto& tri : reTris1) {
+        m_mesh1.AddFace2TopoTriMesh(tri);
+        for (auto const& pnt : tri) {
+            if (m_mesh1.p2V.count(pnt))
+                m_mesh1.p2V.at(pnt)->posTag = 2;
+        }
+    }
+    for (auto& tri : reTris2) {
+        m_mesh2.AddFace2TopoTriMesh(tri);
+        for (auto const& pnt : tri) {
+            if (m_mesh2.p2V.count(pnt))
+                m_mesh2.p2V.at(pnt)->posTag = 2;
+        }
+    }
     
     for (auto& cPIntSeg : m_coPlanarIntSegs) {
         std::vector<std::vector<Vec3d>> tris = GeomCalc::Triangulate(cPIntSeg);
@@ -747,6 +759,11 @@ void MeshIntersector::ProcessNonCoPlanarIntersectResult()
 
     for (auto& tri : reTris1) m_mesh1.AddFace2TopoTriMesh(tri);
     for (auto& tri : reTris2) m_mesh2.AddFace2TopoTriMesh(tri);
+
+    for (auto const& pnt : m_intersectPnts) {
+        if (m_mesh1.p2V.count(pnt)) m_mesh1.p2V.at(pnt)->posTag = 3;
+        if (m_mesh2.p2V.count(pnt)) m_mesh2.p2V.at(pnt)->posTag = 3;
+    }
 
     // 清理数据
     m_face2Segs.clear();

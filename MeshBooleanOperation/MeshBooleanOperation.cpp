@@ -212,13 +212,7 @@ void ShowTriMesh(const TriMesh& mesh)
 
 int main() {
     TriMesh mesh1, mesh2;
-
-    //// Add first cube centered at origin with side length 2
-    //AddCube(mesh1, 0, 0, 0, 2);
-
-    //// Add second cube translated along X axis by 1 unit with side length 2
-    //AddCube(mesh2, 1, 0, 0, 2);
-
+#if 0 // 面片共面情况调试
     mesh1.points = {
         {-1,-1,0},{-1,1,0},{1,1,0},{1,-1,0}
     };
@@ -228,6 +222,19 @@ int main() {
         {0,-1,0},{0,1,0},{2,1,0},{2,-1,0}
     };
     mesh2.indices = { 1,2,3, 0, 1,3,4, 0 };
+#endif
+
+#if 1 // 面片相交情况调试
+    mesh1.points = {
+        {-1,-1,0},{-1,1,0},{1,1,0},{1,-1,0}
+    };
+    mesh1.indices = { 1,2,3, 0, 1,3,4, 0 };
+
+    mesh2.points = {
+        {-1,0,-1},{-1,0,1},{1,0,1},{1,0,-1}
+    };
+    mesh2.indices = { 1,2,3, 0, 1,3,4, 0 };
+#endif
 
     TopoTriMesh* topo1 = new TopoTriMesh;
     topo1->Build(mesh1);
@@ -237,7 +244,6 @@ int main() {
     BooleanOperation booleanOp(topo1, topo2, BooleanOperation::DIFFERENCE);
     TopoTriMesh res;
     booleanOp.Execute(res);
-
 
     return 0;
 }

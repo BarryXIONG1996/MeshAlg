@@ -8,6 +8,8 @@ extern const double g_epsilon;
 BooleanOpHelper::BooleanOpHelper(TopoTriMesh& objMesh, TopoTriMesh& subMesh, TopoTriMesh& coPlanes, int opType)
     : m_objMesh(objMesh), m_subMesh(subMesh), m_coPlanes(coPlanes), m_opType(opType) {}
 
+void ShowTriMesh(const TriMesh& mesh);
+
 // 主执行函数
 bool BooleanOpHelper::Execute(TopoTriMesh& res) {
     // Step 1: 提取区域
@@ -16,6 +18,19 @@ bool BooleanOpHelper::Execute(TopoTriMesh& res) {
 
     TopoTriMesh Mtouto, Mtino;
     BFSExtractRegion(m_subMesh, Mtouto, Mtino);
+    
+#ifdef _DEBUG
+    TriMesh oout, oint, touto, tino;
+    TriMesh oot, tio;
+    Mooutt.ToMesh(oout);
+    Moint.ToMesh(oint);
+    Mtouto.ToMesh(touto);
+    Mtino.ToMesh(tino);
+    ShowTriMesh(oout);
+    ShowTriMesh(oint);
+    ShowTriMesh(touto);
+    ShowTriMesh(tino);
+#endif
 
     // Step 2: 共面部分
     TopoTriMesh Mtono = m_coPlanes;
@@ -39,7 +54,16 @@ bool BooleanOpHelper::Execute(TopoTriMesh& res) {
         break;
     case 2: // DIFFERENCE (obj - sub)
         res = Mooutt;
+        Mtino.Reverse();
         ms = { Mtino };
+
+#ifdef _DEBUG
+        Mooutt.ToMesh(oot);
+        Mtino.ToMesh(tio);
+        ShowTriMesh(oot);
+        ShowTriMesh(tio);
+#endif
+
         ReleaseMeshExceptBoundary(Moint);
         ReleaseMeshExceptBoundary(Mtouto);
         Mtono.ReleaseMem();

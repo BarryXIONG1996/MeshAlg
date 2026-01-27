@@ -28,13 +28,13 @@ extern void ShowTriMesh(const TriMesh& mesh);
         return false;
 
 #ifdef _DEBUG
-    TriMesh t, o, co;
-    m_obj->ToMesh(o);
-    m_sub->ToMesh(t);
-    coPlanes.ToMesh(co);
-    ShowTriMesh(o);
-    ShowTriMesh(t);
-    ShowTriMesh(co);
+    //TriMesh t, o, co;
+    //m_obj->ToMesh(o);
+    //m_sub->ToMesh(t);
+    //coPlanes.ToMesh(co);
+    //ShowTriMesh(o);
+    //ShowTriMesh(t);
+    //ShowTriMesh(co);
 #endif
 
     // 2.²¼¶ûÔËËã

@@ -148,6 +148,14 @@ void TopoTriMesh::RemoveEdge(Edge* e)
     es.erase(std::remove(es.begin(), es.end(), e), es.end());
 }
 
+void TopoTriMesh::Reverse()
+{
+    for (Face* f : fs) {
+        for (int i = 0; i < 3; ++i)
+            f->reverse[i] = !f->reverse[i];
+    }
+}
+
 void TopoTriMesh::ReleaseMem()
 {
     for (auto& f : fs)

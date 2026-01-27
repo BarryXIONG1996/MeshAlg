@@ -47,6 +47,7 @@ struct TopoTriMesh{
     Face* AddFace2TopoTriMesh(std::vector<Vec3d>const& pnts);
     void RemoveFace(Face* f);
     void RemoveEdge(Edge* e); // 移除边之前，要先移除两侧面
+    void Reverse();
     void ReleaseMem();
     void Build(TriMesh const& triMesh);
     void ToMesh(TriMesh& mesh);

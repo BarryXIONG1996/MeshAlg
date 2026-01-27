@@ -235,13 +235,18 @@ int main() {
     mesh2.indices = { 1,2,3, 0, 1,3,4, 0 };
 #endif
 
-#if 1 // 平面，立方体相交情况调试
+#if 0 // 平面，立方体相交情况调试
     AddCube(mesh1, 0, 0, 0, 2);
     mesh2.points = {
         {-1,-1,0},{-1,1,0},{1,1,0},{1,-1,0}
     };
     mesh2.indices = { 1,2,3, 0, 1,3,4, 0 };
 #endif
+
+#if 1 // 立方体相交情况-非平行
+    AddCube(mesh1, 0, 0, 0, 2);
+    AddCube(mesh2, 1, 1, 1, 2);
+#endif 
 
     TopoTriMesh* topo1 = new TopoTriMesh;
     topo1->Build(mesh1);

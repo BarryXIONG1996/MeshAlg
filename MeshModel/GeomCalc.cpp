@@ -479,14 +479,19 @@ bool GeomCalc::PolyIntersect(
             return {};
         }
 
+        std::vector<Vec3d> cdtOuter = outerBoundary;
+        while (cdtOuter.size() > 2 && (cdtOuter.front() - cdtOuter.back()).LengthSq() <= g_epsilon * g_epsilon)
+            cdtOuter.pop_back();
+        if (cdtOuter.size() < 3) return {};
+
         // --- Step 1: 计算平面参数 ---
         Vec3d origin{ 0, 0, 0 };
-        for (const auto& p : outerBoundary) {
+        for (const auto& p : cdtOuter) {
             origin = origin + p;
         }
-        origin = origin * (1.0 / static_cast<double>(outerBoundary.size()));
+        origin = origin * (1.0 / static_cast<double>(cdtOuter.size()));
 
-        Vec3d normal = CompuateNormal(outerBoundary);
+        Vec3d normal = CompuateNormal(cdtOuter);
         if (normal.LengthSq() < g_epsilon * g_epsilon) {
             return {}; // 退化
         }
@@ -505,8 +510,8 @@ bool GeomCalc::PolyIntersect(
 
         // --- Step 2: 投影外边界到 2D，判断绕向 ---
         std::vector<CDT::V2d<double>> outer2D;
-        outer2D.reserve(outerBoundary.size());
-        for (const auto& p : outerBoundary) {
+        outer2D.reserve(cdtOuter.size());
+        for (const auto& p : cdtOuter) {
             outer2D.push_back(project(p));
         }
 
@@ -521,7 +526,6 @@ bool GeomCalc::PolyIntersect(
         bool needReverseOuter = (signedArea < 0); // <0 表示 CW（在右手系中）
 
         // 决定用于 CDT 的外边界（必须是 CCW）
-        std::vector<Vec3d> cdtOuter = outerBoundary;
         if (needReverseOuter) {
             std::reverse(cdtOuter.begin(), cdtOuter.end());
         }
@@ -559,14 +563,14 @@ bool GeomCalc::PolyIntersect(
         }
 
         // --- Step 5: 构建约束边 ---
-        std::vector<CDT::Edge> constraints;
+        CDT::EdgeUSet uniqueConstraints;
 
         // 外边界（现在是 CCW）
         for (size_t i = 0; i < cdtOuter.size(); ++i) {
             size_t j = (i + 1) % cdtOuter.size();
             CDT::VertInd vi = static_cast<CDT::VertInd>(pointToIndex.at(cdtOuter[i]));
             CDT::VertInd vj = static_cast<CDT::VertInd>(pointToIndex.at(cdtOuter[j]));
-            constraints.emplace_back(vi, vj);
+            uniqueConstraints.insert({ vi, vj });
         }
 
         // 交线（开链，原始顺序）
@@ -574,9 +578,14 @@ bool GeomCalc::PolyIntersect(
             for (size_t i = 0; i + 1 < poly.size(); ++i) {
                 CDT::VertInd vi = static_cast<CDT::VertInd>(pointToIndex.at(poly[i]));
                 CDT::VertInd vj = static_cast<CDT::VertInd>(pointToIndex.at(poly[i + 1]));
-                constraints.emplace_back(vi, vj);
+                uniqueConstraints.insert({ vi, vj });
             }
         }
+
+        std::vector<CDT::Edge> constraints;
+        std::for_each(uniqueConstraints.begin(), uniqueConstraints.end(), [&constraints](CDT::Edge const& c) { 
+            constraints.push_back(c); 
+        });
 
         // --- Step 6: 执行 CDT ---
         CDT::Triangulation<double> tri;

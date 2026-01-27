@@ -497,31 +497,72 @@ static std::pair<int, std::set<std::pair<Edge*, Face*>>> BuildEfsAndWeight(
     return { weight, efs };
 }
 
-// 处理“面”与拓扑元素相交的情况（即一个端点来自另一面内部）
+// 处理“面”与拓扑元素相交的情况，并考虑对面边穿过的情况
 static std::pair<int, std::set<std::pair<Edge*, Face*>>> BuildEfsForFaceIntersect(
-    const IntersectionInfo& info, 
-    Face* faceOnOtherSide, 
-    Vec3d const& oOtherSide, 
-    Vec3d const& nOtherSide,
-    double baseW
+    const IntersectionInfo& info,                // 当前交点（如 p2_start）
+    Face* faceOnOtherSide,                       // 当前交点所属的“对面”面（如 f1）
+    const Vec3d& oOtherSide,                     // 对面面的平面原点（如 o1）
+    const Vec3d& nOtherSide,                     // 对面面的法向（如 norm1）
+    const IntersectionInfo& pOther_start,        // 新增：另一侧路径起点
+    const IntersectionInfo& pOther_end,          // 新增：另一侧路径终点
+    Face* oppositeFace                           // 新增：p1 所在的面（如 f2）
 )
 {
     std::set<std::pair<Edge*, Face*>> efs;
+
+    // 基础权重：Edge=1, Vertex=2
     int weight = (info.type == TopoType::EdgeType) ? 1 : 2;
 
+    // === 新增：检查是否穿过对面的一条边（即 p1_start 和 p1_end 都是顶点）===
+    bool isEdgeCrossing =
+        (pOther_start.type == TopoType::VertexType) &&
+        (pOther_end.type == TopoType::VertexType);
+    Edge* otherE = nullptr;
+    if (isEdgeCrossing) {
+        weight += 1; // 等价于 baseW = 1
+        Vertex* v1 = static_cast<Vertex*>(pOther_start.topo);
+        Vertex* v2 = static_cast<Vertex*>(pOther_end.topo);
+        // 在 v1 的邻接边中查找连接 v2 的边
+        for (Edge* e : v1->GetAdjacentEdges()) {
+            if (e && (e->v1 == v2 || e->v2 == v2)) {
+                otherE = e;
+                break; // 通常只有一条公共边
+            }
+        }
+    }
+
+    // === 处理 info（主交点）===
     if (info.type == TopoType::EdgeType) {
         Edge* e = static_cast<Edge*>(info.topo);
-        efs.insert({ e, faceOnOtherSide });
+        if (isEdgeCrossing) { // 边边相交
+            assert(otherE, "边无效！");
+            if (e->lF) efs.insert({ otherE,e->lF });
+            if (e->rF) efs.insert({ otherE,e->rF });
+            if (otherE->lF) efs.insert({ e,otherE->lF });
+            if (otherE->rF) efs.insert({ e,otherE->rF });
+        }
+        else { // 边面相交
+            efs.insert({ e, faceOnOtherSide });
+        }
         VertexPlaneRelPos(e->v1, oOtherSide, nOtherSide);
         VertexPlaneRelPos(e->v2, oOtherSide, nOtherSide);
     }
-    else {
+    else { // VertexType
         Vertex* v = static_cast<Vertex*>(info.topo);
-        for (Edge* ce : v->GetAdjacentEdges()) {
-            if (ce) {
+        if (isEdgeCrossing) {
+            for (Edge* ce : v->GetAdjacentEdges()) {
+                if (!ce) continue;
+                if (otherE->lF) efs.insert({ ce,otherE->lF });
+                if (otherE->rF) efs.insert({ ce,otherE->rF });
+            }
+            for (Face* cf : v->GetAdjacentFaces()) {
+                if (!cf) continue;
+                efs.insert({ otherE,cf });
+            }
+        } else {
+            for (Edge* ce : v->GetAdjacentEdges()) {
+                if (!ce) continue;
                 efs.insert({ ce, faceOnOtherSide });
-                /*VertexPlaneRelPos(ce->v1, oOtherSide, nOtherSide);
-                VertexPlaneRelPos(ce->v2, oOtherSide, nOtherSide);*/
             }
         }
         v->posTag = 3;
@@ -600,19 +641,13 @@ void MeshIntersector::NonCoPlanarFaceInt(Face* f1, Face* f2)
         intPnts.push_back(intO + intDir * p1_start.param);
     }
     else if (p1_start.param < p2_start.param) {
-        double baseW = 0.0;
-        if (p1_start.type == p1_end.type && p1_start.type == TopoType::VertexType) // 此时穿过f1的边
-            baseW = 1.0;
-        auto [w, efs] = BuildEfsForFaceIntersect(p2_start, f1, o1, norm1, baseW);
+        auto [w, efs] = BuildEfsForFaceIntersect(p2_start, f1, o1, norm1, p1_start, p1_end, f2);
         weights.push_back(w);
         allEfs.push_back(efs);
         intPnts.push_back(intO + intDir * p2_start.param);
     }
     else {
-        double baseW = 0.0;
-        if (p2_start.type == p2_end.type && p2_start.type == TopoType::VertexType)
-            baseW = 1.0;
-        auto [w, efs] = BuildEfsForFaceIntersect(p1_start, f2, o2, norm2, baseW);
+        auto [w, efs] = BuildEfsForFaceIntersect(p1_start, f2, o2, norm2, p2_start, p2_end, f1);
         weights.push_back(w);
         allEfs.push_back(efs);
         intPnts.push_back(intO + intDir * p1_start.param);
@@ -626,19 +661,13 @@ void MeshIntersector::NonCoPlanarFaceInt(Face* f1, Face* f2)
         intPnts.push_back(intO + intDir * p1_end.param);
     }
     else if (p2_end.param < p1_end.param) {
-        double baseW = 0.0;
-        if (p1_start.type == p1_end.type && p1_start.type == TopoType::VertexType)
-            baseW = 1.0;
-        auto [w, efs] = BuildEfsForFaceIntersect(p2_end, f1, o1, norm1, baseW);
+        auto [w, efs] = BuildEfsForFaceIntersect(p2_end, f1, o1, norm1, p1_start, p1_end, f2);
         weights.push_back(w);
         allEfs.push_back(efs);
         intPnts.push_back(intO + intDir * p2_end.param);
     }
     else {
-        double baseW = 0.0;
-        if (p2_start.type == p2_end.type && p2_start.type == TopoType::VertexType)
-            baseW = 1.0;
-        auto [w, efs] = BuildEfsForFaceIntersect(p1_end, f2, o2, norm2, baseW);
+        auto [w, efs] = BuildEfsForFaceIntersect(p1_end, f2, o2, norm2, p2_start, p2_end, f1);
         weights.push_back(w);
         allEfs.push_back(efs);
         intPnts.push_back(intO + intDir * p1_end.param);
@@ -657,6 +686,7 @@ void MeshIntersector::NonCoPlanarFaceInt(Face* f1, Face* f2)
             std::set<int> indices = m_ef2Int.at(ef);
             bool isSamePnt = false;
             for (int idx : indices) {
+                // 同一交点会在多次求交中遇到，避免重复添加
                 if ((m_intersectPnts.at(idx) - intPnts.at(intIdx)).Length() < g_epsilon) {
                     isSamePnt = true;
                     seg.push_back(idx);
@@ -668,37 +698,33 @@ void MeshIntersector::NonCoPlanarFaceInt(Face* f1, Face* f2)
             assert(indices.size() < 2, "边面交点数目大于2!");
             double w = weights.at(intIdx);
             double otherIntW = m_weights.at(otherIntIdx);
-            if (w >= 2.0 && otherIntW >= 2.0) // 线面共面，此时可以有两个交点
-            {
+            if (w >= 2.0 && otherIntW >= 2.0) { // 线面共面，此时可以有两个交点
                 m_intersectPnts.push_back(intPnts.at(intIdx));
                 m_weights.push_back(w);
                 int segEndIdx = m_intersectPnts.size() - 1;
                 seg.push_back(segEndIdx);
             }
-            else // 取高权重点
-            {
-                if (w > otherIntW)
-                {
+            else { // 非线面共面，只能有一个交点，取高权重点
+                if (w > otherIntW) {
                     m_intersectPnts.at(otherIntIdx) = intPnts.at(intIdx);
                     m_weights.at(otherIntIdx) = w;
                 }
                 seg.push_back(otherIntIdx);
             }
+            break;
         }
 
         if (exist) {
-            for (auto const& ef : efs) {
+            for (auto const& ef : efs)
                 m_ef2Int[ef].insert(seg.back());
-            }
         }
         else {
             m_intersectPnts.push_back(intPnts.at(intIdx));
             m_weights.push_back(weights.at(intIdx));
             int segEndIdx = m_intersectPnts.size() - 1;
             seg.push_back(segEndIdx);
-            for (auto const& ef : efs) {
+            for (auto const& ef : efs)
                 m_ef2Int.insert({ ef, {(int)segEndIdx} });
-            }
         }
     }
     m_intSegs.push_back({ seg.front(),seg.back() });

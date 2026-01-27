@@ -12,6 +12,7 @@
 #include <osgGA/TrackballManipulator>
 #include <osg/LineWidth>
 #include <osg/Material>
+#include <osg/Depth>
 
 // Helper function to add a cube centered at (cx, cy, cz) with side length 'side'
 void AddCube(TriMesh& mesh, double cx, double cy, double cz, double side) {
@@ -58,8 +59,7 @@ void AddCube(TriMesh& mesh, double cx, double cy, double cz, double side) {
     }
 }
 
-// 将 TriMesh 转为 osg::Geometry
-osg::ref_ptr<osg::Geometry> createGeometryFromTriMesh(const TriMesh& mesh)
+osg::ref_ptr<osg::Geode> createGeometryFromTriMesh(const TriMesh& mesh)
 {
     if (mesh.points.empty() || mesh.indices.empty()) {
         return nullptr;
@@ -76,10 +76,8 @@ osg::ref_ptr<osg::Geometry> createGeometryFromTriMesh(const TriMesh& mesh)
         ));
     }
 
-    // === 2. 解析索引（1-based + 0 分隔）===
-    std::vector<GLuint> triIndices; // 使用 GLuint 而非 unsigned int（更明确）
-    triIndices.reserve(mesh.indices.size());
-
+    // === 2. 解析三角形索引（1-based + 0 分隔）===
+    std::vector<GLuint> triIndices;
     for (size_t i = 0; i < mesh.indices.size(); ) {
         if (mesh.indices[i] == 0) {
             ++i;
@@ -99,47 +97,38 @@ osg::ref_ptr<osg::Geometry> createGeometryFromTriMesh(const TriMesh& mesh)
             triIndices.push_back(static_cast<GLuint>(i1));
             triIndices.push_back(static_cast<GLuint>(i2));
         }
-        i += 4;
+        i += 4; // 跳过 3 个顶点 + 1 个分隔符（0）
     }
 
     if (triIndices.empty()) {
         return nullptr;
     }
 
-    // === 3. 创建 DrawElementsUInt ===
-    osg::ref_ptr<osg::DrawElementsUInt> drawElementsTriangles = new osg::DrawElementsUInt(osg::PrimitiveSet::TRIANGLES);
-    drawElementsTriangles->reserve(triIndices.size());
-    for (GLuint idx : triIndices) {
-        drawElementsTriangles->push_back(idx);
+    // === 3. 创建三角形 PrimitiveSet ===
+    osg::ref_ptr<osg::DrawElementsUInt> triangles = new osg::DrawElementsUInt(osg::PrimitiveSet::TRIANGLES);
+    triangles->assign(triIndices.begin(), triIndices.end());
+
+    // === 4. 创建线框 PrimitiveSet（每条边）===
+    osg::ref_ptr<osg::DrawElementsUInt> lines = new osg::DrawElementsUInt(osg::PrimitiveSet::LINES);
+    lines->reserve(triIndices.size() * 2); // 每个三角形 3 条边 × 2 顶点
+    for (size_t i = 0; i < triIndices.size(); i += 3) {
+        GLuint a = triIndices[i], b = triIndices[i + 1], c = triIndices[i + 2];
+        lines->push_back(a); lines->push_back(b);
+        lines->push_back(b); lines->push_back(c);
+        lines->push_back(c); lines->push_back(a);
     }
 
-    // === 4. 创建线条 PrimitiveSet ===
-    osg::ref_ptr<osg::DrawElementsUInt> drawElementsLines = new osg::DrawElementsUInt(osg::PrimitiveSet::LINES);
-    for (size_t i = 0; i < triIndices.size(); i += 3) { // For each triangle
-        drawElementsLines->push_back(triIndices[i]);
-        drawElementsLines->push_back(triIndices[i + 1]);
+    // === 5. 创建面 Geometry ===
+    osg::ref_ptr<osg::Geometry> faceGeom = new osg::Geometry;
+    faceGeom->setVertexArray(vertices.get());
+    faceGeom->addPrimitiveSet(triangles.get());
 
-        drawElementsLines->push_back(triIndices[i + 1]);
-        drawElementsLines->push_back(triIndices[i + 2]);
-
-        drawElementsLines->push_back(triIndices[i + 2]);
-        drawElementsLines->push_back(triIndices[i]);
-    }
-
-    // === 5. 构建 Geometry ===
-    osg::ref_ptr<osg::Geometry> geometry = new osg::Geometry;
-    geometry->setVertexArray(vertices.get());
-    geometry->addPrimitiveSet(drawElementsTriangles.get());
-    geometry->addPrimitiveSet(drawElementsLines.get());
-
-    // === 6. （可选）生成法向 ===
+    // 法向
     osg::ref_ptr<osg::Vec3Array> normals = new osg::Vec3Array;
     normals->resize(vertices->size(), osg::Vec3(0, 0, 0));
-
     for (size_t i = 0; i < triIndices.size(); i += 3) {
         GLuint a = triIndices[i], b = triIndices[i + 1], c = triIndices[i + 2];
         if (a >= normals->size() || b >= normals->size() || c >= normals->size()) continue;
-
         const osg::Vec3& va = (*vertices)[a];
         const osg::Vec3& vb = (*vertices)[b];
         const osg::Vec3& vc = (*vertices)[c];
@@ -148,41 +137,51 @@ osg::ref_ptr<osg::Geometry> createGeometryFromTriMesh(const TriMesh& mesh)
         (*normals)[b] += faceNorm;
         (*normals)[c] += faceNorm;
     }
-
-    for (osg::Vec3& n : *normals) {
+    for (auto& n : *normals) {
         if (n.length2() > 0.0f) n.normalize();
     }
-    geometry->setNormalArray(normals.get());
-    geometry->setNormalBinding(osg::Geometry::BIND_PER_VERTEX);
+    faceGeom->setNormalArray(normals.get());
+    faceGeom->setNormalBinding(osg::Geometry::BIND_PER_VERTEX);
 
-    // === 7. （可选）设置颜色 ===
-    osg::ref_ptr<osg::Vec4Array> colors = new osg::Vec4Array;
-    colors->push_back(osg::Vec4(0.8f, 0.8f, 1.0f, 1.0f)); // 浅蓝色
-    geometry->setColorArray(colors.get());
-    geometry->setColorBinding(osg::Geometry::BIND_OVERALL);
+    // 面颜色（浅蓝）
+    osg::ref_ptr<osg::Vec4Array> faceColor = new osg::Vec4Array;
+    faceColor->push_back(osg::Vec4(0.8f, 0.8f, 1.0f, 1.0f));
+    faceGeom->setColorArray(faceColor.get());
+    faceGeom->setColorBinding(osg::Geometry::BIND_OVERALL);
 
-    // === 8. 设置不同的线条颜色（如果需要）===
-    osg::StateSet* stateset = geometry->getOrCreateStateSet();
-    osg::LineWidth* linewidth = new osg::LineWidth();
-    linewidth->setWidth(2.0f); // 线宽设置
-    stateset->setAttributeAndModes(linewidth, osg::StateAttribute::ON);
+    // === 6. 创建线框 Geometry ===
+    osg::ref_ptr<osg::Geometry> wireGeom = new osg::Geometry;
+    wireGeom->setVertexArray(vertices.get());
+    wireGeom->addPrimitiveSet(lines.get());
 
-    osg::ref_ptr<osg::Vec4Array> lineColors = new osg::Vec4Array;
-    lineColors->push_back(osg::Vec4(1.0f, 0.0f, 0.0f, 1.0f)); // 红色线条
-    osg::Material* material = new osg::Material;
-    material->setColorMode(osg::Material::AMBIENT_AND_DIFFUSE);
-    stateset->setAttribute(material);
+    // 线框颜色（红色）
+    osg::ref_ptr<osg::Vec4Array> wireColor = new osg::Vec4Array;
+    wireColor->push_back(osg::Vec4(1.0f, 0.0f, 0.0f, 1.0f));
+    wireGeom->setColorArray(wireColor.get());
+    wireGeom->setColorBinding(osg::Geometry::BIND_OVERALL);
 
-    return geometry;
+    // 线宽 + 深度设置（关键！）
+    osg::StateSet* wireSS = wireGeom->getOrCreateStateSet();
+    wireSS->setAttribute(new osg::LineWidth(2.0f), osg::StateAttribute::ON);
+
+    // 关闭深度写入，避免被三角面遮挡
+    osg::ref_ptr<osg::Depth> depth = new osg::Depth;
+    depth->setWriteMask(false); // 不写深度缓冲
+    wireSS->setAttributeAndModes(depth, osg::StateAttribute::ON);
+
+    // 可选：关闭光照，确保颜色准确显示
+    wireSS->setMode(GL_LIGHTING, osg::StateAttribute::OFF);
+
+    // === 7. 组装到 Geode ===
+    osg::ref_ptr<osg::Geode> geode = new osg::Geode;
+    geode->addDrawable(faceGeom.get());
+    geode->addDrawable(wireGeom.get());
+
+    return geode;
 }
-
 // 主函数：创建场景
 osg::ref_ptr<osg::Node> createSceneFromTriMesh(const TriMesh& mesh) {
-    auto geode = new osg::Geode;
-    auto geom = createGeometryFromTriMesh(mesh);
-    if (geom) {
-        geode->addDrawable(geom);
-    }
+    auto geode = createGeometryFromTriMesh(mesh);
 
     // 启用光照（需要法向）
     geode->getOrCreateStateSet()->setMode(GL_LIGHTING, osg::StateAttribute::ON);

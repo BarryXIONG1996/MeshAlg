@@ -29,7 +29,7 @@ Vec3d GeomCalc::CompuateNormal(std::vector<Vec3d> const& pnts)
 }
 
 // 通过自动选择 XY/XZ/YZ 中面积最大的投影平面
-bool GeomCalc::IsLeft(const Vec3d& a, const Vec3d& b, const Vec3d& p)
+bool GeomCalc::IsLeft(const Vec3d& a, const Vec3d& b, const Vec3d& p, Vec3d const& refN)
 {
     Vec3d ab = b - a;
     Vec3d ap = p - a;
@@ -37,26 +37,7 @@ bool GeomCalc::IsLeft(const Vec3d& a, const Vec3d& b, const Vec3d& p)
     // 计算叉积 (用于找最大投影面)
     Vec3d cross = ab.Cross(ap);
 
-    // 找绝对值最大的分量（决定投影到哪个坐标平面）
-    double ax = std::abs(cross.x);
-    double ay = std::abs(cross.y);
-    double az = std::abs(cross.z);
-
-    double area2;
-    if (ax >= ay && ax >= az) {
-        // 投影到 YZ 平面（忽略 x）
-        area2 = ab.y * ap.z - ab.z * ap.y;
-    }
-    else if (ay >= az) {
-        // 投影到 XZ 平面（忽略 y）
-        area2 = ab.z * ap.x - ab.x * ap.z;
-    }
-    else {
-        // 投影到 XY 平面（忽略 z）
-        area2 = ab.x * ap.y - ab.y * ap.x;
-    }
-
-    return area2 > g_epsilon;
+    return cross.Dot(refN) > 0;
 }
 
 bool GeomCalc::IsPointOnSegment(const Vec3d& p, const Vec3d& a, const Vec3d& b, double& paramP)

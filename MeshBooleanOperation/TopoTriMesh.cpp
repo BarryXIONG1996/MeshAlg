@@ -78,13 +78,14 @@ Face* TopoTriMesh::AddFace2TopoTriMesh(std::vector<Vec3d> const& pnts)
 
     // 3. 设置边的拓扑关系
     Vec3d center = (pnts[0] + pnts[1] + pnts[2])/3;
+    Vec3d refN = GeomCalc::CompuateNormal(pnts);
 
     // 设置每条边的 lF, rF, lPE, rPE
     for (int i = 0; i < 3; ++i) {
         int next = (i + 1) % 3;
         int prev = (i - 1 + 3) % 3;
 
-        if (GeomCalc::IsLeft(newF->es[i]->v1->pnt, newF->es[i]->v2->pnt, center)) {
+        if (GeomCalc::IsLeft(newF->es[i]->v1->pnt, newF->es[i]->v2->pnt, center, refN)) {
             newF->es[i]->lF = newF;
             newF->es[i]->lPE = newF->es[prev];
             newF->es[i]->lSE = newF->es[next];
@@ -242,11 +243,12 @@ void TopoTriMesh::Build(const TriMesh& triMesh) {
         std::pair<int, int> e3_key = { std::min(i2, i0), std::max(i2, i0) };
 
         bool isFLeft[3] = { false, false, false };
+        Vec3d refN = GeomCalc::CompuateNormal({ vs.at(i0)->pnt, vs.at(i1)->pnt, vs.at(i2)->pnt });
 
         // --- 处理 e0: (i0, i1) ---
         auto it1 = cEs.find(e1_key);
         if (it1 == cEs.end()) {
-            if (GeomCalc::IsLeft(vs[i0]->pnt, vs[i1]->pnt, center))
+            if (GeomCalc::IsLeft(vs[i0]->pnt, vs[i1]->pnt, center, refN))
                f->es[0] = new Edge{ vs[i0], vs[i1], f }, isFLeft[0] = true;
             else
                f->es[0] = new Edge{ vs[i0], vs[i1], nullptr, f };
@@ -268,7 +270,7 @@ void TopoTriMesh::Build(const TriMesh& triMesh) {
         // --- 处理 e1: (i1, i2) ---
         auto it2 = cEs.find(e2_key);
         if (it2 == cEs.end()) {
-            if (GeomCalc::IsLeft(vs[i1]->pnt, vs[i2]->pnt, center))
+            if (GeomCalc::IsLeft(vs[i1]->pnt, vs[i2]->pnt, center, refN))
                f->es[1] = new Edge{ vs[i1], vs[i2], f }, isFLeft[1] = true;
             else
                f->es[1] = new Edge{ vs[i1], vs[i2], nullptr, f };
@@ -290,7 +292,7 @@ void TopoTriMesh::Build(const TriMesh& triMesh) {
         // --- 处理 e2: (i2, i0) ---
         auto it3 = cEs.find(e3_key);
         if (it3 == cEs.end()) {
-            if (GeomCalc::IsLeft(vs[i2]->pnt, vs[i0]->pnt, center))
+            if (GeomCalc::IsLeft(vs[i2]->pnt, vs[i0]->pnt, center, refN))
                f->es[2] = new Edge{ vs[i2], vs[i0], f }, isFLeft[2] = true;
             else
                f->es[2] = new Edge{ vs[i2], vs[i0], nullptr, f };

@@ -245,9 +245,14 @@ int main() {
     mesh2.indices = { 1,2,3, 0, 1,3,4, 0 };
 #endif
 
-#if 1 // 立方体相交情况-非平行
+#if 0 // 立方体相交情况-非共面
     AddCube(mesh1, 0, 0, 0, 2);
     AddCube(mesh2, 1, 1, 1, 2);
+#endif 
+
+#if 1 // 立方体相交情况-有共面
+    AddCube(mesh1, 0, 0, 0, 2);
+    AddCube(mesh2, 1, 1, 0, 2);
 #endif 
 
     TopoTriMesh* topo1 = new TopoTriMesh;

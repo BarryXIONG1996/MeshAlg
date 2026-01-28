@@ -1,4 +1,5 @@
 ﻿#include <Geometry.h>
+#include <GeomCalc.h>
 #include "TopoTriMesh.h"
 #include "BooleanOperation.h"
 #include <array>
@@ -163,6 +164,7 @@ osg::ref_ptr<osg::Geode> createGeometryFromTriMesh(const TriMesh& mesh)
     // 线宽 + 深度设置（关键！）
     osg::StateSet* wireSS = wireGeom->getOrCreateStateSet();
     wireSS->setAttribute(new osg::LineWidth(2.0f), osg::StateAttribute::ON);
+    wireSS->setMode(GL_CULL_FACE, osg::StateAttribute::OFF); // 关闭背面剔除
 
     // 关闭深度写入，避免被三角面遮挡
     osg::ref_ptr<osg::Depth> depth = new osg::Depth;
@@ -184,8 +186,8 @@ osg::ref_ptr<osg::Node> createSceneFromTriMesh(const TriMesh& mesh) {
     auto geode = createGeometryFromTriMesh(mesh);
 
     // 启用光照（需要法向）
-    geode->getOrCreateStateSet()->setMode(GL_LIGHTING, osg::StateAttribute::ON);
-    geode->getOrCreateStateSet()->setMode(GL_LIGHT0, osg::StateAttribute::ON);
+    /*geode->getOrCreateStateSet()->setMode(GL_LIGHTING, osg::StateAttribute::ON);
+    geode->getOrCreateStateSet()->setMode(GL_LIGHT0, osg::StateAttribute::ON);*/
 
     return geode;
 }
@@ -256,6 +258,10 @@ int main() {
     BooleanOperation booleanOp(topo1, topo2, BooleanOperation::DIFFERENCE);
     TopoTriMesh res;
     booleanOp.Execute(res);
+
+    TriMesh rM;
+    res.ToMesh(rM);
+    bool isSolid = GeomCalc::IsClosedSolid(rM);
 
     return 0;
 }

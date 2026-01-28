@@ -776,3 +776,78 @@ bool GeomCalc::PolyIntersect(
 
         return true;
     }
+
+
+    // 辅助：提取三角形索引（处理 1-based + 0 分隔）
+    static std::vector<std::array<unsigned int, 3>> extractTriangles(const TriMesh& mesh) {
+        std::vector<std::array<unsigned int, 3>> tris;
+        const auto& idx = mesh.indices;
+        const size_t n = mesh.points.size();
+
+        for (size_t i = 0; i < idx.size(); ) {
+            if (idx[i] == 0) {
+                ++i;
+                continue;
+            }
+            if (i + 2 >= idx.size()) break;
+
+            int i0 = idx[i] - 1;
+            int i1 = idx[i + 1] - 1;
+            int i2 = idx[i + 2] - 1;
+
+            if (i0 >= 0 && i1 >= 0 && i2 >= 0 &&
+                static_cast<size_t>(i0) < n &&
+                static_cast<size_t>(i1) < n &&
+                static_cast<size_t>(i2) < n) {
+                tris.push_back({ static_cast<unsigned int>(i0),
+                                static_cast<unsigned int>(i1),
+                                static_cast<unsigned int>(i2) });
+            }
+            i += 4; // 跳过 3 个顶点 + 1 个分隔符
+        }
+        return tris;
+    }
+
+    // 判断是否为闭合实体
+    bool GeomCalc::IsClosedSolid(const TriMesh& mesh) {
+        if (mesh.points.empty() || mesh.indices.empty()) {
+            return false;
+        }
+
+        auto triangles = extractTriangles(mesh);
+        if (triangles.empty()) {
+            return false;
+        }
+
+        // 使用 unordered_map 存储边 -> 出现次数
+        // 边表示为 (min, max) 的 pair，确保方向无关
+        struct EdgeHash {
+            std::size_t operator()(const std::pair<unsigned int, unsigned int>& e) const {
+                return (static_cast<std::size_t>(e.first) << 16) ^ e.second;
+            }
+        };
+
+        std::unordered_map<std::pair<unsigned int, unsigned int>, int, EdgeHash> edgeCount;
+
+        for (const auto& tri : triangles) {
+            unsigned int a = tri[0], b = tri[1], c = tri[2];
+
+            // 三条边：(a,b), (b,c), (c,a)
+            std::pair<unsigned int, unsigned int> e1 = { std::min(a, b), std::max(a, b) };
+            std::pair<unsigned int, unsigned int> e2 = { std::min(b, c), std::max(b, c) };
+            std::pair<unsigned int, unsigned int> e3 = { std::min(c, a), std::max(c, a) };
+
+            edgeCount[e1]++;
+            edgeCount[e2]++;
+            edgeCount[e3]++;
+        }
+
+        // 检查：每条边必须出现恰好 2 次
+        for (const auto& kv : edgeCount) {
+            if (kv.second != 2) {
+                return false;
+            }
+        }
+
+        return true;
+    }

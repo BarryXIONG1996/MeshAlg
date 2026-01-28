@@ -55,4 +55,7 @@ struct MESHMODELDLL GeomCalc
         const std::vector<Vec3d>& bnd,
         const std::vector<std::vector<Vec3d>>& holes,
         std::vector<std::vector<Vec3d>>& outTriangles); // 每个元素是三角形（3点）
+
+    // 是否是闭合三角网格
+    static bool IsClosedSolid(const TriMesh& mesh);
 };

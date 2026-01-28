@@ -20,16 +20,16 @@ bool BooleanOpHelper::Execute(TopoTriMesh& res) {
     BFSExtractRegion(m_subMesh, Mtouto, Mtino);
     
 #ifdef _DEBUG
-    TriMesh oout, oint, touto, tino;
+    //TriMesh oout, oint, touto, tino;
     TriMesh oot, tio;
-    Mooutt.ToMesh(oout);
-    Moint.ToMesh(oint);
-    Mtouto.ToMesh(touto);
-    Mtino.ToMesh(tino);
-    ShowTriMesh(oout);
-    ShowTriMesh(oint);
-    ShowTriMesh(touto);
-    ShowTriMesh(tino);
+    //Mooutt.ToMesh(oout);
+    //Moint.ToMesh(oint);
+    //Mtouto.ToMesh(touto);
+    //Mtino.ToMesh(tino);
+    //ShowTriMesh(oout);
+    //ShowTriMesh(oint);
+    //ShowTriMesh(touto);
+    //ShowTriMesh(tino);
 #endif
 
     // Step 2: 共面部分

@@ -56,6 +56,10 @@ bool BooleanOpHelper::Execute(TopoTriMesh& res) {
         res = Mooutt;
         Mtino.Reverse();
         ms = { Mtino };
+        ReleaseMeshExceptBoundary(Moint);
+        ReleaseMeshExceptBoundary(Mtouto);
+        Mtono.ReleaseMem();
+
 
 #ifdef _DEBUG
         Mooutt.ToMesh(oot);
@@ -64,9 +68,6 @@ bool BooleanOpHelper::Execute(TopoTriMesh& res) {
         ShowTriMesh(tio);
 #endif
 
-        ReleaseMeshExceptBoundary(Moint);
-        ReleaseMeshExceptBoundary(Mtouto);
-        Mtono.ReleaseMem();
         CombineTopoTriMesh(res, ms);
         break;
     default:
@@ -114,6 +115,25 @@ void BooleanOpHelper::BFSExtractRegion(const TopoTriMesh& mesh, TopoTriMesh& Mou
         }
     }
 
+#if 1 // 避免出现悬空边和顶点
+    std::set<Vertex*> vvIn;
+    std::set<Edge*> veIn;
+    for (auto* f : Min.fs) {
+        std::vector<Edge*> fes = f->getEdges();
+        std::vector<Vertex*> fvs = f->getVertices();
+        for (Edge* e : fes) {
+            if (veIn.count(e)) continue;
+            Min.es.push_back(e);
+            veIn.insert(e);
+        }
+        for (Vertex* v : fvs) {
+            if (vvIn.count(v)) continue;
+            Min.vs.push_back(v);
+            vvIn.insert(v);
+        }
+    }
+#else
+    /*目前的逻辑可能导致生成的拓扑实体中包含悬空边（即不与面关联的边）*/
     for (auto* e : mesh.es) {
         if (veOut.find(e) == veOut.end() ||
             (e->v1 && e->v2 && e->v1->posTag == 3 && e->v2->posTag == 3)) {
@@ -121,6 +141,7 @@ void BooleanOpHelper::BFSExtractRegion(const TopoTriMesh& mesh, TopoTriMesh& Mou
         }
     }
 
+    /*目前的逻辑可能导致生成的拓扑实体中包含悬空顶点（即不与面关联的顶点）*/
     for (auto* v : mesh.vs) {
         // ON 顶点（posTag==3）强制加入 Min ← 修改(3)
         if (vvOut.find(v) == vvOut.end() || v->posTag == 3) {
@@ -128,6 +149,7 @@ void BooleanOpHelper::BFSExtractRegion(const TopoTriMesh& mesh, TopoTriMesh& Mou
             Min.p2V[v->pnt] = v;
         }
     }
+#endif
 }
 
 // AddFace：保持原始三边数组逻辑，无修改
@@ -220,59 +242,69 @@ void BooleanOpHelper::CombineTopoTriMesh(TopoTriMesh& M, std::vector<TopoTriMesh
 void BooleanOpHelper::ReleaseMeshExceptBoundary(TopoTriMesh& M) {
     // 遍历M
     std::set<Face*> fs;
-    std::set<Edge*> es, esOn;
     for (auto& f : M.fs) {
         if (!f) continue;
         fs.insert(f);
     }
 
-    for (auto& e : M.es)
-    {
+    // 是否是内部面
+    auto IsInnerEdges = [&](Edge* e) {
+        if (e->lF && !fs.count(e->lF)) return false;
+        if (e->rF && !fs.count(e->rF)) return false;
+        return true;
+    };
+
+    std::set<Edge*> es/*内部边*/, esOn/*边界边*/;
+    for (auto& e : M.es) {
         if (!e) continue;
-        if (e->v1 && e->v2 && e->v1->posTag == 3 && e->v2->posTag == 3)
+        if ((e->v1 && e->v2) 
+            && (e->v1->posTag == 3 && e->v2->posTag == 3)
+            && !IsInnerEdges(e)/*非内部边*/)
             esOn.insert(e);
         else
             es.insert(e);
     }
 
-    // 解除顶点联系
-    for (auto& v : M.vs) {
-        if (!v || v->posTag != 3) continue;
-        // 获取与v相连的所有边
-        std::vector<Edge*> cEdges = v->GetAdjacentEdges();
-        for (auto& ce : cEdges) {
-            if (es.count(ce))
-                v->es.erase(ce);
-        }
-    }
-
-    // 解除交线联系
-    for (auto& e : esOn)
-    {
-        if (fs.count(e->lF))
-        {
+    std::set<Vertex*> vsOn/*边界顶点*/;
+    for (auto& e : esOn) {
+        // 解除边界联系
+        if (fs.count(e->lF)) {
             e->lF = nullptr;
             e->lSE = e->lPE = nullptr;
         }
-        else
-        {
+        else {
             e->rF = nullptr;
             e->rSE = e->rPE = nullptr;
+        }
+        // 解除边界顶点联系
+        if (e->v1) {
+            vsOn.insert(e->v1);
+            std::vector<Edge*> cEdges = e->v1->GetAdjacentEdges();
+            for (auto& ce : cEdges) {
+                if (es.count(ce))
+                    e->v1->es.erase(ce);
+            }
+        }
+        if (e->v2) {
+            vsOn.insert(e->v2);
+            std::vector<Edge*> cEdges = e->v2->GetAdjacentEdges();
+            for (auto& ce : cEdges) {
+                if (es.count(ce))
+                    e->v2->es.erase(ce);
+            }
         }
     }
 
     // 内存释放
     std::for_each(M.fs.begin(), M.fs.end(), [](Face* f) { delete f; f = nullptr; });
-    std::for_each(M.es.begin(), M.es.end(), [](Edge* e) {
-        if (e->v1 && e->v2 && e->v1->posTag == 3 && e->v2->posTag == 3)
-            return;
+    std::for_each(M.es.begin(), M.es.end(), [&](Edge* e) {
+        if (esOn.count(e)) return; // 跳过边界
         delete e;
         e = nullptr;
-        });
-    std::for_each(M.vs.begin(), M.vs.end(), [](Vertex* v) {
-        if (v->posTag == 3)
-            return;
+    });
+    std::for_each(M.vs.begin(), M.vs.end(), [&](Vertex* v) {
+        if (vsOn.count(v)) return; // 跳过边界顶点
         delete v;
         v = nullptr;
-        });
+    });
 }

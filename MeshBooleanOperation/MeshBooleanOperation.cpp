@@ -325,10 +325,18 @@ int main() {
     AddCube(mesh2, 1, 1, 0, 2);
 #endif
 
-#if 1 // 隧道内空，电缆槽1
+#if 0 // 隧道内空，左侧电缆槽
     mesh1.BuildFromOBJ("TestSamples/leftCCSec3d-1.obj");
     for (int i = 0; i < mesh1.indices.size(); i+=4) {
         std::swap(mesh1.indices.at(i), mesh1.indices.at(i+2));
+    }
+    mesh2.BuildFromOBJ("TestSamples/insideCrossSecs-1.obj");
+#endif
+
+#if 1 // 隧道内空，右侧电缆槽
+    mesh1.BuildFromOBJ("TestSamples/rightCCSec3d-1.obj");
+    for (int i = 0; i < mesh1.indices.size(); i += 4) {
+        std::swap(mesh1.indices.at(i), mesh1.indices.at(i + 2));
     }
     mesh2.BuildFromOBJ("TestSamples/insideCrossSecs-1.obj");
 #endif
@@ -339,8 +347,8 @@ int main() {
     topo2->Build(mesh2);
 
 #ifdef _DRAW
-    //ShowTriMesh(mesh1);
-    //ShowTriMesh(mesh2);
+    ShowTriMesh(mesh1);
+    ShowTriMesh(mesh2);
 #endif
 
     BooleanOperation booleanOp(topo1, topo2, BooleanOperation::INTERSECTION);

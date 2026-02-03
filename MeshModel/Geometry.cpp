@@ -1,5 +1,9 @@
 #include "Geometry.h"
 
+#include <fstream>
+#include <sstream>
+#include <cctype>
+
 const double g_epsilon = 1e-9;
 
 Vec2d Vec2d::operator+(const Vec2d& v) const {
@@ -169,4 +173,83 @@ Vec3d BndBox3d::Center() const {
         (lowerBnd.y + upperBnd.y) / 2,
         (lowerBnd.z + upperBnd.z) / 2,
     };
+}
+
+void TriMesh::BuildFromOBJ(const std::string& fileName)
+{
+    // 清空现有数据
+    points.clear();
+    indices.clear();
+
+    std::ifstream file(fileName);
+    if (!file.is_open()) {
+        // 可选：抛出异常或记录错误；此处静默失败
+        return;
+    }
+
+    std::string line;
+    while (std::getline(file, line)) {
+        // 跳过空行和注释
+        if (line.empty() || line[0] == '#') continue;
+
+        // 去除行首空白
+        size_t start = line.find_first_not_of(" \t\r");
+        if (start == std::string::npos) continue;
+        line = line.substr(start);
+
+        // 判断行类型（忽略大小写）
+        char firstChar = static_cast<char>(std::tolower(static_cast<unsigned char>(line[0])));
+        if (firstChar != 'v' && firstChar != 'f') continue;
+
+        // 顶点: v x y z
+        if (firstChar == 'v' && (line.size() == 1 || !std::isalpha(static_cast<unsigned char>(line[1])))) {
+            std::istringstream iss(line.substr(1));
+            double x, y, z;
+            if (iss >> x >> y >> z) {
+                points.push_back({ x, y, z });
+            }
+        }
+        // 面: f v1 v2 v3 ...
+        else if (firstChar == 'f') {
+            std::istringstream iss(line.substr(1));
+            std::vector<int> faceIndices;
+            std::string token;
+
+            while (iss >> token) {
+                // 提取顶点索引（忽略纹理/法向）
+                size_t slash = token.find('/');
+                std::string idxStr = slash != std::string::npos ? token.substr(0, slash) : token;
+                if (idxStr.empty()) continue;
+
+                try {
+                    int idx = std::stoi(idxStr);
+                    if (idx < 0) {
+                        // 负索引：-1 表示最后一个顶点
+                        idx = static_cast<int>(points.size()) + idx + 1;
+                    }
+                    // OBJ 索引从 1 开始，我们保留 1-based
+                    if (idx >= 1 && idx <= static_cast<int>(points.size())) {
+                        faceIndices.push_back(idx);
+                    }
+                    else {
+                        faceIndices.clear(); // 索引越界，丢弃整个面
+                        break;
+                    }
+                }
+                catch (...) {
+                    faceIndices.clear();
+                    break;
+                }
+            }
+
+            // 仅处理三角形（严格 3 个顶点）
+            if (faceIndices.size() == 3) {
+                indices.insert(indices.end(), faceIndices.begin(), faceIndices.end());
+                indices.push_back(0); // 用 0 分隔每个三角形
+            }
+            // 注：若需支持四边形等，可在此处添加三角剖分逻辑
+        }
+    }
+
+    file.close();
 }

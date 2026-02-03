@@ -211,6 +211,76 @@ void ShowTriMesh(const TriMesh& mesh)
     viewer.run();
 }
 
+
+// 假设 Vec3dCmp 已在项目中定义（使用 g_epsilon 容差比较）
+// 若未定义，需补充：struct Vec3dCmp { bool operator()(const Vec3d& a, const Vec3d& b) const { ... } };
+
+void ShowTriMeshWithVertexColor(
+    const std::vector<std::vector<Vec3d>>& tris,
+    const std::vector<Vec3d>& boundary,
+    const std::vector<std::vector<Vec3d>>& intSegs)
+{
+    if (tris.empty()) return;
+
+    // === 1. 构建关键点集合（boundary + intSegs，容差去重）===
+    std::set<Vec3d, Vec3dCmp> keyPoints;
+    auto addPoints = [&keyPoints](const auto& container) {
+        for (const auto& p : container) keyPoints.insert(p);
+        };
+
+    addPoints(boundary);
+    for (const auto& poly : intSegs) addPoints(poly);
+
+    // === 2. 构建OSG几何数据 ===
+    osg::ref_ptr<osg::Vec3Array> vertices = new osg::Vec3Array;
+    osg::ref_ptr<osg::Vec4Array> colors = new osg::Vec4Array;
+    vertices->reserve(tris.size() * 3);
+    colors->reserve(tris.size() * 3);
+
+    const osg::Vec4 yellow(1.0f, 1.0f, 0.0f, 1.0f); // boundary/intSegs 中的点
+    const osg::Vec4 blue(0.0f, 0.0f, 1.0f, 1.0f);    // 其他点（含CDT生成的交点）
+
+    for (const auto& tri : tris) {
+        if (tri.size() != 3) continue;
+        for (const auto& v : tri) {
+            vertices->push_back(osg::Vec3(static_cast<float>(v.x),
+                static_cast<float>(v.y),
+                static_cast<float>(v.z)));
+            colors->push_back(keyPoints.count(v) ? yellow : blue);
+        }
+    }
+
+    if (vertices->empty()) return;
+
+    // === 3. 创建带顶点颜色的几何体 ===
+    osg::ref_ptr<osg::Geometry> geom = new osg::Geometry;
+    geom->setVertexArray(vertices);
+    geom->setColorArray(colors);
+    geom->setColorBinding(osg::Geometry::BIND_PER_VERTEX);
+
+    // 添加三角形图元（连续顶点）
+    geom->addPrimitiveSet(new osg::DrawArrays(GL_TRIANGLES, 0, vertices->size()));
+
+    // 禁用光照确保颜色准确显示
+    osg::ref_ptr<osg::StateSet> ss = geom->getOrCreateStateSet();
+    ss->setMode(GL_LIGHTING, osg::StateAttribute::OFF);
+    ss->setMode(GL_BLEND, osg::StateAttribute::ON);
+    ss->setRenderingHint(osg::StateSet::TRANSPARENT_BIN);
+
+    // === 4. 构建场景并显示 ===
+    osg::ref_ptr<osg::Geode> geode = new osg::Geode;
+    geode->addDrawable(geom);
+
+    osg::ref_ptr<osg::Group> root = new osg::Group;
+    root->addChild(geode);
+
+    osgViewer::Viewer viewer;
+    viewer.setSceneData(root);
+    viewer.setCameraManipulator(new osgGA::TrackballManipulator());
+    viewer.realize();
+    viewer.run();
+}
+
 int main() {
     TriMesh mesh1, mesh2;
 #if 0 // 平面共面情况调试
@@ -237,7 +307,7 @@ int main() {
     mesh2.indices = { 1,2,3, 0, 1,3,4, 0 };
 #endif
 
-#if 1 // 平面，立方体相交情况调试
+#if 0 // 平面，立方体相交情况调试
     AddCube(mesh1, 0, 0, 0, 2);
     mesh2.points = {
         {-1,-1,0},{-1,1,0},{1,1,0},{1,-1,0}
@@ -253,17 +323,30 @@ int main() {
 #if 0 // 立方体相交情况-有共面
     AddCube(mesh1, 0, 0, 0, 2);
     AddCube(mesh2, 1, 1, 0, 2);
-#endif 
+#endif
+
+#if 1 // 隧道内空，电缆槽1
+    mesh1.BuildFromOBJ("TestSamples/leftCCSec3d-1.obj");
+    for (int i = 0; i < mesh1.indices.size(); i+=4) {
+        std::swap(mesh1.indices.at(i), mesh1.indices.at(i+2));
+    }
+    mesh2.BuildFromOBJ("TestSamples/insideCrossSecs-1.obj");
+#endif
 
     TopoTriMesh* topo1 = new TopoTriMesh;
     topo1->Build(mesh1);
     TopoTriMesh* topo2 = new TopoTriMesh;
     topo2->Build(mesh2);
 
-    BooleanOperation booleanOp(topo1, topo2, BooleanOperation::DIFFERENCE);
+#ifdef _DRAW
+    //ShowTriMesh(mesh1);
+    //ShowTriMesh(mesh2);
+#endif
+
+    BooleanOperation booleanOp(topo1, topo2, BooleanOperation::INTERSECTION);
     TopoTriMesh res;
     booleanOp.Execute(res);
-
+     
     TriMesh rM;
     res.ToMesh(rM);
     bool isSolid = GeomCalc::IsClosedSolid(rM);

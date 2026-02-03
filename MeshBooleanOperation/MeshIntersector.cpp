@@ -499,13 +499,13 @@ static std::pair<int, std::set<std::pair<Edge*, Face*>>> BuildEfsAndWeight(
 
 // 处理“面”与拓扑元素相交的情况，并考虑对面边穿过的情况
 static std::pair<int, std::set<std::pair<Edge*, Face*>>> BuildEfsForFaceIntersect(
-    const IntersectionInfo& info,                // 当前交点（如 p2_start）
-    Face* faceOnOtherSide,                       // 当前交点所属的“对面”面（如 f1）
-    const Vec3d& oOtherSide,                     // 对面面的平面原点（如 o1）
-    const Vec3d& nOtherSide,                     // 对面面的法向（如 norm1）
-    const IntersectionInfo& pOther_start,        // 新增：另一侧路径起点
-    const IntersectionInfo& pOther_end,          // 新增：另一侧路径终点
-    Face* oppositeFace                           // 新增：p1 所在的面（如 f2）
+    const IntersectionInfo& info,                // p2_start
+    Face* faceOnOtherSide,                       // f1
+    const Vec3d& oOtherSide,                     // o1
+    const Vec3d& nOtherSide,                     // norm1
+    const IntersectionInfo& pOther_start,        // p1_start
+    const IntersectionInfo& pOther_end,          // p1_end
+    Face* oppositeFace                           // f2
 )
 {
     std::set<std::pair<Edge*, Face*>> efs;
@@ -540,14 +540,12 @@ static std::pair<int, std::set<std::pair<Edge*, Face*>>> BuildEfsForFaceIntersec
             if (e->rF) efs.insert({ otherE,e->rF });
             if (otherE->lF) efs.insert({ e,otherE->lF });
             if (otherE->rF) efs.insert({ e,otherE->rF });
-        }
-        else { // 边面相交
+        } else { // 边面相交
             efs.insert({ e, faceOnOtherSide });
         }
         VertexPlaneRelPos(e->v1, oOtherSide, nOtherSide);
         VertexPlaneRelPos(e->v2, oOtherSide, nOtherSide);
-    }
-    else { // VertexType
+    } else { // VertexType
         Vertex* v = static_cast<Vertex*>(info.topo);
         if (isEdgeCrossing) {
             for (Edge* ce : v->GetAdjacentEdges()) {
@@ -733,11 +731,17 @@ void MeshIntersector::NonCoPlanarFaceInt(Face* f1, Face* f2)
     m_face2Segs[f2].insert(intSegIndex);
 }
 
+void ShowTriMeshWithVertexColor(
+    const std::vector<std::vector<Vec3d>>& tris,
+    const std::vector<Vec3d>& boundary,
+    const std::vector<std::vector<Vec3d>>& intSegs);
+
 void MeshIntersector::ProcessNonCoPlanarIntersectResult()
 {
     // 获取待删除的面和边
     std::set<Face*> rmFaces;
     std::set<Edge*> rmEdges1, rmEdges2;
+    std::vector<Vec3d> newPts1, newPts2; // 存放交线的交点
     for (auto const& [f, segs] : m_face2Segs) {
         rmFaces.insert(f);
         for (auto seg : segs) {
@@ -775,11 +779,20 @@ void MeshIntersector::ProcessNonCoPlanarIntersectResult()
                 intSegs.push_back({ s,e });
             }
         }
-        std::vector<std::vector<Vec3d>> tris = GeomCalc::TriangulateWithConstraints(boundary, intSegs);
-        if (f->topo == &m_mesh1)
+        std::vector<Vec3d> newPts;
+        std::vector<std::vector<Vec3d>> tris = GeomCalc::TriangulateWithConstraints(boundary, intSegs, newPts);
+        if (f->topo == &m_mesh1) {
             reTris1.insert(reTris1.end(), tris.begin(), tris.end());
-        if (f->topo == &m_mesh2)
+            newPts1.insert(newPts1.end(), newPts.begin(), newPts.end());
+        }
+        if (f->topo == &m_mesh2) {
             reTris2.insert(reTris2.end(), tris.begin(), tris.end());
+            newPts2.insert(newPts2.end(), newPts.begin(), newPts.end());
+        }
+#ifdef _DRAW
+        if (!newPts.empty())
+            ShowTriMeshWithVertexColor(tris, boundary, intSegs);
+#endif
     }
 
     for (auto& f : rmFaces) {

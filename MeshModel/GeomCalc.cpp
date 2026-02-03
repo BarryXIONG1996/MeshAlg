@@ -454,147 +454,109 @@ bool GeomCalc::PolyIntersect(
 
     std::vector<std::vector<Vec3d>> GeomCalc::TriangulateWithConstraints(
         const std::vector<Vec3d>& outerBoundary,
-        const std::vector<std::vector<Vec3d>>& intersectionPolylines)
+        const std::vector<std::vector<Vec3d>>& intersectionPolylines,
+        std::vector<Vec3d>& newIntPnts)
     {
-        if (outerBoundary.size() < 3) {
-            return {};
-        }
+        newIntPnts.clear();
+        if (outerBoundary.size() < 3) return {};
 
+        // === 1. 规范化外边界（移除重复首尾点）===
         std::vector<Vec3d> cdtOuter = outerBoundary;
         while (cdtOuter.size() > 2 && (cdtOuter.front() - cdtOuter.back()).LengthSq() <= g_epsilon * g_epsilon)
             cdtOuter.pop_back();
         if (cdtOuter.size() < 3) return {};
 
-        // --- Step 1: 计算平面参数 ---
-        Vec3d origin{ 0, 0, 0 };
-        for (const auto& p : cdtOuter) {
-            origin = origin + p;
-        }
-        origin = origin * (1.0 / static_cast<double>(cdtOuter.size()));
-
+        // === 2. 计算投影平面 ===
+        Vec3d origin = std::accumulate(cdtOuter.begin(), cdtOuter.end(), Vec3d{ 0,0,0 }) * (1.0 / cdtOuter.size());
         Vec3d normal = CompuateNormal(cdtOuter);
-        if (normal.LengthSq() < g_epsilon * g_epsilon) {
-            return {}; // 退化
-        }
+        if (normal.LengthSq() < g_epsilon * g_epsilon) return {};
 
-        Vec3d arbitrary = (std::abs(normal.x) < 0.9) ? Vec3d{ 1, 0, 0 } : Vec3d{ 0, 1, 0 };
-        Vec3d x_axis = normal.Cross(arbitrary).Normalization();
+        Vec3d x_axis = normal.Cross(std::abs(normal.x) < 0.9 ? Vec3d{ 1,0,0 } : Vec3d{ 0,1,0 }).Normalization();
         Vec3d y_axis = normal.Cross(x_axis);
 
-        // 投影函数
-        auto project = [&](const Vec3d& p) -> CDT::V2d<double> {
+        auto project = [&](const Vec3d& p) {
             Vec3d rel = p - origin;
-            double u = rel.Dot(x_axis);
-            double v = rel.Dot(y_axis);
-            return { u, v };
+            return CDT::V2d<double>{rel.Dot(x_axis), rel.Dot(y_axis)};
             };
 
-        // --- Step 2: 投影外边界到 2D，判断绕向 ---
-        std::vector<CDT::V2d<double>> outer2D;
-        outer2D.reserve(cdtOuter.size());
-        for (const auto& p : cdtOuter) {
-            outer2D.push_back(project(p));
-        }
+        // === 3. 确保外边界为CCW（2D投影）===
+        std::vector<CDT::V2d<double>> outer2D(cdtOuter.size());
+        std::transform(cdtOuter.begin(), cdtOuter.end(), outer2D.begin(), project);
 
-        // 计算有符号面积（标准公式）
-        double signedArea = 0.0;
-        size_t N = outer2D.size();
-        for (size_t i = 0; i < N; ++i) {
-            size_t j = (i + 1) % N;
-            signedArea += outer2D[i].x * outer2D[j].y - outer2D[j].x * outer2D[i].y;
-        }
+        double area = 0.0;
+        for (size_t i = 0, n = outer2D.size(); i < n; ++i)
+            area += outer2D[i].x * outer2D[(i + 1) % n].y - outer2D[(i + 1) % n].x * outer2D[i].y;
 
-        bool needReverseOuter = (signedArea < 0); // <0 表示 CW（在右手系中）
+        if (area < 0) std::reverse(cdtOuter.begin(), cdtOuter.end());
 
-        // 决定用于 CDT 的外边界（必须是 CCW）
-        if (needReverseOuter) {
-            std::reverse(cdtOuter.begin(), cdtOuter.end());
-        }
-
-        // --- Step 3: 收集所有唯一点（使用原始几何，含反转后的外边界）---
+        // === 4. 收集所有输入点（3D去重）并构建2D顶点 ===
         std::map<Vec3d, size_t, Vec3dCmp> pointToIndex;
-        std::vector<Vec3d> uniquePoints;
-
-        auto addPoint = [&](const Vec3d& p) -> size_t {
-            auto it = pointToIndex.find(p);
-            if (it != pointToIndex.end()) return it->second;
-            size_t idx = uniquePoints.size();
-            uniquePoints.push_back(p);
-            pointToIndex[p] = idx;
-            return idx;
+        auto addPoint = [&](const Vec3d& p) {
+            auto [it, inserted] = pointToIndex.emplace(p, pointToIndex.size());
+            return it->second;
             };
 
-        // 添加外边界（可能是反转后的）
-        for (const auto& p : cdtOuter) {
-            addPoint(p);
-        }
+        // 添加外边界点
+        for (const auto& p : cdtOuter) addPoint(p);
+        // 添加交线点
+        for (const auto& poly : intersectionPolylines)
+            for (const auto& p : poly) addPoint(p);
 
-        // 添加交线（保持原始顺序）
-        for (const auto& poly : intersectionPolylines) {
-            for (const auto& p : poly) {
-                addPoint(p);
-            }
-        }
+        // 构建CDT顶点（2D投影）
+        std::vector<CDT::V2d<double>> cdtVertices(pointToIndex.size());
+        for (const auto& [p, idx] : pointToIndex)
+            cdtVertices[idx] = project(p);
 
-        // --- Step 4: 构建 CDT 顶点 ---
-        std::vector<CDT::V2d<double>> cdtVertices;
-        cdtVertices.reserve(uniquePoints.size());
-        for (const auto& p : uniquePoints) {
-            cdtVertices.push_back(project(p));
-        }
+        // === 5. 构建约束边（自动去重）===
+        CDT::EdgeUSet edgeSet;
+        auto addEdge = [&](size_t i, size_t j) {
+            if (i != j) edgeSet.insert({ static_cast<CDT::VertInd>(i), static_cast<CDT::VertInd>(j) });
+            };
 
-        // --- Step 5: 构建约束边 ---
-        CDT::EdgeUSet uniqueConstraints;
+        // 外边界（闭合）
+        for (size_t i = 0, n = cdtOuter.size(); i < n; ++i)
+            addEdge(pointToIndex[cdtOuter[i]], pointToIndex[cdtOuter[(i + 1) % n]]);
 
-        // 外边界（现在是 CCW）
-        for (size_t i = 0; i < cdtOuter.size(); ++i) {
-            size_t j = (i + 1) % cdtOuter.size();
-            CDT::VertInd vi = static_cast<CDT::VertInd>(pointToIndex.at(cdtOuter[i]));
-            CDT::VertInd vj = static_cast<CDT::VertInd>(pointToIndex.at(cdtOuter[j]));
-            uniqueConstraints.insert({ vi, vj });
-        }
+        // 交线（开链）
+        for (const auto& poly : intersectionPolylines)
+            for (size_t i = 0, n = poly.size() - 1; i < n; ++i)
+                addEdge(pointToIndex[poly[i]], pointToIndex[poly[i + 1]]);
 
-        // 交线（开链，原始顺序）
-        for (const auto& poly : intersectionPolylines) {
-            for (size_t i = 0; i + 1 < poly.size(); ++i) {
-                CDT::VertInd vi = static_cast<CDT::VertInd>(pointToIndex.at(poly[i]));
-                CDT::VertInd vj = static_cast<CDT::VertInd>(pointToIndex.at(poly[i + 1]));
-                uniqueConstraints.insert({ vi, vj });
-            }
-        }
+        std::vector<CDT::Edge> constraints(edgeSet.begin(), edgeSet.end());
 
-        std::vector<CDT::Edge> constraints;
-        std::for_each(uniqueConstraints.begin(), uniqueConstraints.end(), [&constraints](CDT::Edge const& c) { 
-            constraints.push_back(c); 
-        });
+        // === 6. 执行CDT（启用自动解决相交）===
+        CDT::Triangulation<double> tri(
+            CDT::VertexInsertionOrder::Auto,
+            CDT::IntersectingConstraintEdges::TryResolve,
+            g_epsilon
+        );
 
-        // --- Step 6: 执行 CDT ---
-        CDT::Triangulation<double> tri;
         tri.insertVertices(cdtVertices);
+        const size_t origVertCount = tri.vertices.size(); // CDT 2D去重后的原始顶点数
         tri.insertEdges(constraints);
         tri.eraseOuterTrianglesAndHoles();
 
-        // --- Step 7: 提取结果，并恢复原始绕向 ---
-        std::vector<std::vector<Vec3d>> result;
-        for (const auto& t : tri.triangles) {
-            if (t.vertices[0] == CDT::noVertex ||
-                t.vertices[1] == CDT::noVertex ||
-                t.vertices[2] == CDT::noVertex) {
-                continue;
-            }
-
-            std::vector<Vec3d> triangle = {
-                uniquePoints[t.vertices[0]],
-                uniquePoints[t.vertices[1]],
-                uniquePoints[t.vertices[2]]
+        // === 7. 重建完整3D顶点（含交点）并提取新顶点 ===
+        auto to3D = [&](const CDT::V2d<double>& v) {
+            return origin + x_axis * v.x + y_axis * v.y;
             };
 
-            // 如果原始外边界是 CW（我们反转过），则三角形也要反转以匹配原始法向
-            if (needReverseOuter) {
-                std::reverse(triangle.begin(), triangle.end());
-            }
+        std::vector<Vec3d> allPoints3D;
+        allPoints3D.reserve(tri.vertices.size());
+        std::transform(tri.vertices.begin(), tri.vertices.end(), std::back_inserter(allPoints3D), to3D);
 
-            result.push_back(std::move(triangle));
+        if (origVertCount < allPoints3D.size())
+            newIntPnts.assign(allPoints3D.begin() + origVertCount, allPoints3D.end());
+
+        // === 8. 提取三角形（恢复原始绕向）===
+        std::vector<std::vector<Vec3d>> result;
+        for (const auto& t : tri.triangles) {
+            if (t.vertices[0] == CDT::noVertex || t.vertices[1] == CDT::noVertex || t.vertices[2] == CDT::noVertex)
+                continue;
+
+            std::vector<Vec3d> tri3D = { allPoints3D[t.vertices[0]], allPoints3D[t.vertices[1]], allPoints3D[t.vertices[2]] };
+            if (area < 0) std::reverse(tri3D.begin(), tri3D.end()); // 与原始外边界绕向一致
+            result.push_back(std::move(tri3D));
         }
 
         return result;

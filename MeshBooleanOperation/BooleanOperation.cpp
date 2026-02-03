@@ -27,14 +27,14 @@ extern void ShowTriMesh(const TriMesh& mesh);
     if (!intersector.Execute(coPlanes))
         return false;
 
-#ifdef _DEBUG
-    //TriMesh t, o, co;
-    //m_obj->ToMesh(o);
-    //m_sub->ToMesh(t);
-    //coPlanes.ToMesh(co);
-    //ShowTriMesh(o);
-    //ShowTriMesh(t);
-    //ShowTriMesh(co);
+#ifdef _DRAW
+    TriMesh t, o, co;
+    m_obj->ToMesh(o);
+    m_sub->ToMesh(t);
+    coPlanes.ToMesh(co);
+    ShowTriMesh(o);
+    ShowTriMesh(t);
+    ShowTriMesh(co);
 #endif
 
     // 2.≤º∂˚‘ÀÀ„
@@ -42,7 +42,7 @@ extern void ShowTriMesh(const TriMesh& mesh);
     if (!boolHelper.Execute(res))
         return false;
 
-#ifdef _DEBUG
+#ifdef _DRAW
     TriMesh re;
     res.ToMesh(re);
     ShowTriMesh(re);

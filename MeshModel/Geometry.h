@@ -8,6 +8,7 @@
 
 #include <vector>
 #include <map>
+#include <string>
 
 extern const double g_epsilon;
 
@@ -61,5 +62,7 @@ struct MESHMODELDLL TriMesh
 {
     std::vector<int> indices;
     std::vector<Vec3d> points;
+
+    void BuildFromOBJ(const std::string& fileName);
 };
 

@@ -19,17 +19,17 @@ bool BooleanOpHelper::Execute(TopoTriMesh& res) {
     TopoTriMesh Mtouto, Mtino;
     BFSExtractRegion(m_subMesh, Mtouto, Mtino);
     
-#ifdef _DEBUG
-    //TriMesh oout, oint, touto, tino;
+#ifdef _DRAW
+    TriMesh oout, oint, touto, tino;
     TriMesh oot, tio;
-    //Mooutt.ToMesh(oout);
-    //Moint.ToMesh(oint);
-    //Mtouto.ToMesh(touto);
-    //Mtino.ToMesh(tino);
-    //ShowTriMesh(oout);
-    //ShowTriMesh(oint);
-    //ShowTriMesh(touto);
-    //ShowTriMesh(tino);
+    Mooutt.ToMesh(oout);
+    Moint.ToMesh(oint);
+    Mtouto.ToMesh(touto);
+    Mtino.ToMesh(tino);
+    ShowTriMesh(oout);
+    ShowTriMesh(oint);
+    ShowTriMesh(touto);
+    ShowTriMesh(tino);
 #endif
 
     // Step 2: 共面部分
@@ -38,18 +38,18 @@ bool BooleanOpHelper::Execute(TopoTriMesh& res) {
     // Step 3: 按操作类型组合
     std::vector<TopoTriMesh> ms;
     switch (m_opType) {
-    case 0: // INTERSECTION
-        res = Moint;
-        ms = { Mtino, Mtono };
-        ReleaseMeshExceptBoundary(Mooutt);
-        ReleaseMeshExceptBoundary(Mtouto);
-        CombineTopoTriMesh(res, ms);
-        break;
-    case 1: // UNION
+    case 0: // UNION
         res = Mooutt;
         ms = { Mtouto, Mtono };
         ReleaseMeshExceptBoundary(Moint);
         ReleaseMeshExceptBoundary(Mtino);
+        CombineTopoTriMesh(res, ms);
+        break;
+    case 1: // INTERSECTION
+        res = Moint;
+        ms = { Mtino, Mtono };
+        ReleaseMeshExceptBoundary(Mooutt);
+        ReleaseMeshExceptBoundary(Mtouto);
         CombineTopoTriMesh(res, ms);
         break;
     case 2: // DIFFERENCE (obj - sub)
@@ -60,12 +60,11 @@ bool BooleanOpHelper::Execute(TopoTriMesh& res) {
         ReleaseMeshExceptBoundary(Mtouto);
         Mtono.ReleaseMem();
 
-
-#ifdef _DEBUG
-        Mooutt.ToMesh(oot);
-        Mtino.ToMesh(tio);
-        ShowTriMesh(oot);
-        ShowTriMesh(tio);
+#ifdef _DRAW
+        //Mooutt.ToMesh(oot);
+        //Mtino.ToMesh(tio);
+        //ShowTriMesh(oot);
+        //ShowTriMesh(tio);
 #endif
 
         CombineTopoTriMesh(res, ms);
@@ -91,6 +90,22 @@ void BooleanOpHelper::BFSExtractRegion(const TopoTriMesh& mesh, TopoTriMesh& Mou
                 if (e && visitedE.find(e) == visitedE.end()) {
                     es.push(e);
                     visitedE.insert(e);
+                }
+            }
+        }
+    }
+
+    bool isOut = true;
+    // 如果没有外部点，则从 posTag == 1（In）的顶点出发
+    if (es.empty()) {
+        isOut = false;
+        for (auto* v : mesh.vs) {
+            if (v && v->posTag == 1) {
+                for (Edge* e : v->es) {
+                    if (e && visitedE.find(e) == visitedE.end()) {
+                        es.push(e);
+                        visitedE.insert(e);
+                    }
                 }
             }
         }
@@ -129,6 +144,7 @@ void BooleanOpHelper::BFSExtractRegion(const TopoTriMesh& mesh, TopoTriMesh& Mou
         for (Vertex* v : fvs) {
             if (vvIn.count(v)) continue;
             Min.vs.push_back(v);
+            Min.p2V.insert({v->pnt, v});
             vvIn.insert(v);
         }
     }
@@ -150,6 +166,9 @@ void BooleanOpHelper::BFSExtractRegion(const TopoTriMesh& mesh, TopoTriMesh& Mou
         }
     }
 #endif
+
+    if (!isOut)
+        std::swap(Mout, Min);
 }
 
 // AddFace：保持原始三边数组逻辑，无修改

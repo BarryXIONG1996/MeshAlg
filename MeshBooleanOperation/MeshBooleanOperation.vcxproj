@@ -149,6 +149,10 @@
     <ClInclude Include="RTree.h" />
     <ClInclude Include="TopoTriMesh.h" />
   </ItemGroup>
+  <ItemGroup>
+    <Object Include="TestSamples\insideCrossSecs-1.obj" />
+    <Object Include="TestSamples\leftCCSec3d-1.obj" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

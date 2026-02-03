@@ -51,4 +51,12 @@
       <Filter>header</Filter>
     </ClInclude>
   </ItemGroup>
+  <ItemGroup>
+    <Object Include="TestSamples\insideCrossSecs-1.obj">
+      <Filter>TestSamples</Filter>
+    </Object>
+    <Object Include="TestSamples\leftCCSec3d-1.obj">
+      <Filter>TestSamples</Filter>
+    </Object>
+  </ItemGroup>
 </Project>

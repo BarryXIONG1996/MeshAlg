@@ -42,6 +42,7 @@ struct TopoTriMesh{
     std::vector<Edge*> es;
     std::vector<Face*> fs;
     std::map<Vec3d, Vertex*, Vec3dCmp> p2V; // 几何去重（带epsilon）
+    std::map<std::pair<Vertex*, Vertex*>, Edge*> edgeMap;
 
     BndBox3d GetBndBox();
     Face* AddFace2TopoTriMesh(std::vector<Vec3d>const& pnts);

@@ -1,5 +1,6 @@
 #include "TopoTriMesh.h"
 #include <GeomCalc.h>
+#include <algorithm>
 
 BndBox3d TopoTriMesh::GetBndBox() {
     BndBox3d bbox;
@@ -17,7 +18,7 @@ BndBox3d TopoTriMesh::GetBndBox() {
 Face* TopoTriMesh::AddFace2TopoTriMesh(std::vector<Vec3d> const& pnts)
 {
     // 1. 创建或获取顶点 v1, v2, v3
-    if (pnts.size() > 3) return nullptr;
+    if (pnts.size() != 3) return nullptr;
     Vertex* vertices[3] = { nullptr, nullptr, nullptr };
     for (size_t i = 0; i < pnts.size(); ++i) {
         auto it = p2V.find(pnts[i]);
@@ -36,19 +37,6 @@ Face* TopoTriMesh::AddFace2TopoTriMesh(std::vector<Vec3d> const& pnts)
     if (!vertices[0] || !vertices[1] || !vertices[2]) return nullptr;
 
     // 2. 创建或获取边 e1, e2, e3
-    auto makeEdgeKey = [](Vertex* a, Vertex* b) -> std::pair<Vertex*, Vertex*> {
-        return std::make_pair(std::min(a, b), std::max(a, b));
-    };
-
-    std::map<std::pair<Vertex*, Vertex*>, Edge*> edgeMap;
-    // 填充 edgeMap
-    for (auto& e : es) {
-        if (e && e->v1 && e->v2) {
-            auto key = makeEdgeKey(e->v1, e->v2);
-            edgeMap[key] = e;
-        }
-    }
-
     // 构造三条边：v1-v2, v2-v3, v3-v1
     Face* newF = new Face;
     newF->topo = this;
@@ -56,11 +44,11 @@ Face* TopoTriMesh::AddFace2TopoTriMesh(std::vector<Vec3d> const& pnts)
     for (auto const& pnt : pnts) newF->bbox.Add(pnt);
 
     for (int i = 0; i < 3; ++i) {
-        auto key = makeEdgeKey(vertices[i], vertices[(i + 1) % 3]);
+        auto key = std::minmax(vertices[i], vertices[(i + 1) % 3]);
         if (edgeMap.count(key)) {
-            newF->es[i] = edgeMap[key];
             // 不是所有已有边都需要反向
             Edge* ee = edgeMap.at(key);
+            newF->es[i] = ee;
             if (ee->v1 != vertices[i])
                 newF->reverse[i] = true;
             else
@@ -68,7 +56,7 @@ Face* TopoTriMesh::AddFace2TopoTriMesh(std::vector<Vec3d> const& pnts)
         } else {
             Edge* newE = new Edge{ vertices[i], vertices[(i + 1) % 3], nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
             es.push_back(newE);
-            edgeMap[key] = newE;
+            edgeMap.insert({ key, newE });
             newF->es[i] = newE;
             newF->reverse[i] = false;
             vertices[i]->es.insert(newE);
@@ -147,6 +135,7 @@ void TopoTriMesh::RemoveEdge(Edge* e)
 
     // 从边列表中移除 e
     es.erase(std::remove(es.begin(), es.end(), e), es.end());
+    edgeMap.erase({e->v1, e->v2});
 }
 
 void TopoTriMesh::Reverse()
@@ -161,22 +150,19 @@ void TopoTriMesh::Reverse()
 
 void TopoTriMesh::ReleaseMem()
 {
-    for (auto& f : fs)
-    {
+    for (auto& f : fs) {
         delete f; 
         f = nullptr;
     }
     fs.clear();
 
-    for (auto& e : es)
-    {
+    for (auto& e : es) {
         delete e;
         e = nullptr;
     }
     es.clear();
 
-    for (auto& v : vs)
-    {
+    for (auto& v : vs) {
         delete v;
         v = nullptr;
     }
@@ -213,8 +199,6 @@ void TopoTriMesh::Build(const TriMesh& triMesh) {
     }
 
     // --- Step 2: 构建面和边 ---
-    std::map<std::pair<int, int>, Edge*> cEs; // (min, max) -> Edge*
-
     for (int idx = 0; idx + 3 <= static_cast<int>(triMesh.indices.size()); idx += 4) {
         // 跳过无效三角形（如索引为0）
         if (triMesh.indices[idx] == 0 ||
@@ -238,23 +222,23 @@ void TopoTriMesh::Build(const TriMesh& triMesh) {
         Vec3d center = (vs.at(i0)->pnt + vs.at(i1)->pnt + vs.at(i2)->pnt) / 3;
 
         // 构造边 key
-        std::pair<int, int> e1_key = { std::min(i0, i1), std::max(i0, i1) };
-        std::pair<int, int> e2_key = { std::min(i1, i2), std::max(i1, i2) };
-        std::pair<int, int> e3_key = { std::min(i2, i0), std::max(i2, i0) };
+        std::pair<Vertex*, Vertex*> e1_key = std::minmax(vs.at(i0), vs.at(i1));
+        std::pair<Vertex*, Vertex*> e2_key = std::minmax(vs.at(i1), vs.at(i2));
+        std::pair<Vertex*, Vertex*> e3_key = std::minmax(vs.at(i2), vs.at(i0));
 
         bool isFLeft[3] = { false, false, false };
         Vec3d refN = GeomCalc::CompuateNormal({ vs.at(i0)->pnt, vs.at(i1)->pnt, vs.at(i2)->pnt });
 
         // --- 处理 e0: (i0, i1) ---
-        auto it1 = cEs.find(e1_key);
-        if (it1 == cEs.end()) {
+        auto it1 = edgeMap.find(e1_key);
+        if (it1 == edgeMap.end()) {
             if (GeomCalc::IsLeft(vs[i0]->pnt, vs[i1]->pnt, center, refN))
-               f->es[0] = new Edge{ vs[i0], vs[i1], f }, isFLeft[0] = true;
+                f->es[0] = new Edge{ vs[i0], vs[i1], f }, isFLeft[0] = true;
             else
-               f->es[0] = new Edge{ vs[i0], vs[i1], nullptr, f };
+                f->es[0] = new Edge{ vs[i0], vs[i1], nullptr, f };
             f->reverse[0] = false;
             es.push_back(f->es[0]);
-            cEs[e1_key] =f->es[0];
+            edgeMap.insert({ std::minmax(f->es[0]->v1, f->es[0]->v2), f->es[0]});
             vs[i0]->es.insert(f->es[0]);
             vs[i1]->es.insert(f->es[0]);
         }
@@ -268,15 +252,15 @@ void TopoTriMesh::Build(const TriMesh& triMesh) {
         }
 
         // --- 处理 e1: (i1, i2) ---
-        auto it2 = cEs.find(e2_key);
-        if (it2 == cEs.end()) {
+        auto it2 = edgeMap.find(e2_key);
+        if (it2 == edgeMap.end()) {
             if (GeomCalc::IsLeft(vs[i1]->pnt, vs[i2]->pnt, center, refN))
                f->es[1] = new Edge{ vs[i1], vs[i2], f }, isFLeft[1] = true;
             else
                f->es[1] = new Edge{ vs[i1], vs[i2], nullptr, f };
             f->reverse[1] = false;
             es.push_back(f->es[1]);
-            cEs[e2_key] =f->es[1];
+            edgeMap.insert({ std::minmax(f->es[1]->v1, f->es[1]->v2), f->es[1] });
             vs[i1]->es.insert(f->es[1]);
             vs[i2]->es.insert(f->es[1]);
         }
@@ -290,15 +274,15 @@ void TopoTriMesh::Build(const TriMesh& triMesh) {
         }
 
         // --- 处理 e2: (i2, i0) ---
-        auto it3 = cEs.find(e3_key);
-        if (it3 == cEs.end()) {
+        auto it3 = edgeMap.find(e3_key);
+        if (it3 == edgeMap.end()) {
             if (GeomCalc::IsLeft(vs[i2]->pnt, vs[i0]->pnt, center, refN))
                f->es[2] = new Edge{ vs[i2], vs[i0], f }, isFLeft[2] = true;
             else
                f->es[2] = new Edge{ vs[i2], vs[i0], nullptr, f };
             f->reverse[2] = false;
             es.push_back(f->es[2]);
-            cEs[e3_key] =f->es[2];
+            edgeMap.insert({ std::minmax(f->es[2]->v1, f->es[2]->v2), f->es[2] });
             vs[i2]->es.insert(f->es[2]);
             vs[i0]->es.insert(f->es[2]);
         }

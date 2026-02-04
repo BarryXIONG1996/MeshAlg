@@ -15,6 +15,18 @@
 #include <osg/Material>
 #include <osg/Depth>
 
+#include <fstream>
+#include <chrono>
+#include <iomanip>
+#include <iostream>
+#include <vector>
+#include <string>
+#include <algorithm>
+#include <cmath>
+#include <exception>
+#include <numeric>
+
+#if 0 // 正确性测试
 // Helper function to add a cube centered at (cx, cy, cz) with side length 'side'
 void AddCube(TriMesh& mesh, double cx, double cy, double cz, double side) {
     // Define the vertices of the cube
@@ -216,7 +228,6 @@ void ShowTriMesh(const std::vector<TriMesh>& meshs)
     viewer.run();
 }
 
-
 // 假设 Vec3dCmp 已在项目中定义（使用 g_epsilon 容差比较）
 // 若未定义，需补充：struct Vec3dCmp { bool operator()(const Vec3d& a, const Vec3d& b) const { ... } };
 
@@ -338,15 +349,15 @@ int main() {
     mesh2.BuildFromOBJ("TestSamples/insideCrossSecs-1.obj");
 #endif
 
-#if 1 // 隧道内空，右侧电缆槽
+#if 0 // 隧道内空，右侧电缆槽
     mesh1.BuildFromOBJ("TestSamples/rightCCSec3d-1.obj");
     mesh1.FixNormalsToOutside();
     mesh2.BuildFromOBJ("TestSamples/insideCrossSecs-1.obj");
 #endif
 
-#if 0 // 两个球体
-    mesh1.CreateSphere({0,0,0}, 1, 4);
-    mesh2.CreateSphere({1,1,1}, 1, 4);
+#if 1 // 两个球体
+    mesh1.CreateSphere({0,0,0}, 1, 0);
+    mesh2.CreateSphere({1,1,1}, 1, 0);
 #endif
 
     TopoTriMesh* topo1 = new TopoTriMesh;
@@ -368,3 +379,124 @@ int main() {
 
     return 0;
 }
+#else 效率测试
+// 辅助函数：统计TriMesh中的三角形数量（基于0分隔符）
+inline int CountTriangles(const TriMesh& mesh) {
+    return static_cast<int>(std::count(mesh.indices.begin(), mesh.indices.end(), 0));
+}
+
+// 辅助函数：将微秒转换为带单位的字符串（自动选择ms/μs）
+std::string FormatDuration(double microseconds) {
+    if (microseconds >= 1000.0)
+        return std::to_string(microseconds / 1000.0) + " ms";
+    return std::to_string(microseconds) + " μs";
+}
+
+void BenchmarkBooleanIntersection(const std::string& csvPath = "boolean_benchmark.csv",
+    int maxLevel = 4,
+    int iterations = 3)
+{
+    std::ofstream csv(csvPath);
+    if (!csv.is_open()) {
+        std::cerr << "❌ 无法创建CSV文件: " << csvPath << std::endl;
+        return;
+    }
+
+    // 严格按需求精简CSV列：仅保留必要性能与质量指标
+    csv << "input_triangles_per_sphere,output_triangles,avg_duration_ms,"
+        << "min_duration_ms,max_duration_ms,is_closed_solid,notes\n";
+
+    std::cout << "\n[Boolean Operation Benchmark]\n";
+    std::cout << "输出文件: " << csvPath << "\n";
+    std::cout << "测试范围: subdivisionLevel 0 → " << maxLevel << " (iterations=" << iterations << ")\n";
+    std::cout << "CSV列说明: 每球输入面数, 输出面数, 平均/最小/最大耗时(ms), 封闭性, 备注\n\n";
+
+    for (int level = 0; level <= maxLevel; ++level) {
+        // 生成测试网格
+        TriMesh mesh1, mesh2;
+        mesh1.CreateSphere({ 0, 0, 0 }, 1.0, level);
+        mesh2.CreateSphere({ 1, 1, 1 }, 1.0, level);
+
+        int triPerSphere = CountTriangles(mesh1); // 单球三角形数
+        int totalInputTris = triPerSphere * 2;    // 仅用于控制台显示
+
+        bool isClosed = false;
+        std::string notes = "";
+        std::vector<double> durations;
+        TriMesh rM;
+
+        // 多轮测试取统计值
+        for (int iter = 0; iter < iterations; ++iter) {
+            try {
+                TopoTriMesh topo1, topo2;
+                topo1.Build(mesh1), topo2.Build(mesh2);
+                TopoTriMesh res;
+                
+                BooleanOperation booleanOp(&topo1, &topo2, BooleanOperation::INTERSECTION);
+
+                auto start = std::chrono::high_resolution_clock::now();
+                booleanOp.Execute(res);
+                auto end = std::chrono::high_resolution_clock::now();
+
+                // 仅首次验证结果质量（避免重复计算）
+                if (iter == 0) {
+                    res.ToMesh(rM);
+                    isClosed = GeomCalc::IsClosedSolid(rM);
+                    if (!isClosed) notes = "WARNING: Result not closed solid";
+                }
+
+                double duration_us = std::chrono::duration<double, std::micro>(end - start).count();
+                durations.push_back(duration_us);
+            }
+            catch (const std::exception& e) {
+                notes = "ERROR: " + std::string(e.what());
+                durations.push_back(-1.0);
+                break;
+            }
+            catch (...) {
+                notes = "ERROR: Unknown exception";
+                durations.push_back(-1.0);
+                break;
+            }
+        }
+
+        // 计算统计量
+        int outputTris = (durations[0] >= 0 && !durations.empty()) ? CountTriangles(rM) : 0;
+        double avg_us = -1.0, min_us = -1.0, max_us = -1.0;
+        if (!durations.empty() && durations[0] >= 0) {
+            avg_us = std::accumulate(durations.begin(), durations.end(), 0.0) / iterations;
+            min_us = *std::min_element(durations.begin(), durations.end());
+            max_us = *std::max_element(durations.begin(), durations.end());
+        }
+
+        // ✅ 严格按需求输出CSV：移除 subdivision_level 和 total_input_triangles
+        csv << triPerSphere << ","
+            << outputTris << ","
+            << std::fixed << std::setprecision(6) << (avg_us / 1000.0) << ","
+            << std::fixed << std::setprecision(6) << (min_us / 1000.0) << ","
+            << std::fixed << std::setprecision(6) << (max_us / 1000.0) << ","
+            << (isClosed ? "true" : "false") << ","
+            << notes << "\n";
+
+        // 控制台保留完整进度信息（含level和总量，便于人工观察）
+        std::cout << "[Level " << std::setw(2) << level << "] "
+            << "Input/Sphere: " << std::setw(5) << triPerSphere
+            << " | Total Input: " << std::setw(5) << totalInputTris
+            << " | Output: " << std::setw(5) << outputTris
+            << " | Avg: " << FormatDuration(avg_us)
+            << (notes.empty() ? "" : " | " + notes) << "\n";
+    }
+
+    csv.close();
+    std::cout << "\n✅ 基准测试完成！结果已保存至: " << csvPath << "\n";
+    std::cout << "💡 分析建议: 用Excel绘制 'input_triangles_per_sphere vs avg_duration_ms' 曲线\n";
+}
+
+// ============ 使用示例 ============
+
+int main() {
+    // 标准测试：细分级别0～4，每级3次迭代
+    BenchmarkBooleanIntersection("boolean_perf.csv", 6, 6);
+    return 0;
+}
+#endif

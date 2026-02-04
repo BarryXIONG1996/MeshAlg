@@ -8,6 +8,7 @@
 #include <cmath>
 #include <algorithm>
 #include <numeric>
+#include <limits>
 
 const double g_epsilon = 1e-9;
 
@@ -341,4 +342,85 @@ void TriMesh::FixNormalsToOutside()
     indices.clear();
     for (const auto& t : tris)
         indices.insert(indices.end(), { t[0], t[1], t[2], 0 });
+}
+
+void TriMesh::CreateSphere(const Vec3d& center, double radius, int subdivisionLevel)
+{
+    // === 参数校验与初始化 ===
+    if (radius <= std::numeric_limits<double>::epsilon()) {
+        points.clear();
+        indices.clear();
+        return;
+    }
+    if (subdivisionLevel < 0) subdivisionLevel = 0;
+
+    // 清空现有网格数据
+    points.clear();
+    indices.clear();
+
+    // === 1. 构建初始八面体（单位球面，0-based索引）===
+    std::vector<Vec3d> verts = {
+        {1,0,0}, {- 1,0,0}, // X轴
+        {0,1,0}, {0,-1,0}, // Y轴
+        {0,0,1}, {0,0,-1}  // Z轴
+    };
+
+    // 初始8个三角形（经有向体积验证：法向严格向外）
+    std::vector<std::array<int, 3>> faces = {
+        {0,2,4}, {0,4,3}, {0,3,5}, {0,5,2}, // 包含顶点0的4个面
+        {1,4,2}, {1,3,4}, {1,5,3}, {1,2,5}  // 包含顶点1的4个面
+    };
+
+    // === 2. 递归细分（每次将三角形分为4个）===
+    for (int level = 0; level < subdivisionLevel; ++level) {
+        std::map<std::pair<int, int>, int> edgeMap; // (minIdx, maxIdx) -> midpointIdx
+        std::vector<std::array<int, 3>> newFaces;
+        newFaces.reserve(faces.size() * 4);
+
+        // 辅助：获取/创建边中点（归一化到单位球面）
+        auto getMidpoint = [&](int i1, int i2) -> int {
+            auto key = std::make_pair(std::min(i1, i2), std::max(i1, i2));
+            if (auto it = edgeMap.find(key); it != edgeMap.end())
+                return it->second;
+
+            // 计算中点并归一化（若Vec3d无Normalization，替换为下方注释代码）
+            Vec3d mid = (verts[i1] + verts[i2]) * 0.5;
+            // double len = mid.Length(); if (len > 1e-12) mid /= len; // 手动归一化
+            mid = mid.Normalization();
+            int idx = static_cast<int>(verts.size());
+            verts.push_back(mid);
+            edgeMap[key] = idx;
+            return idx;
+            };
+
+        // 细分每个三角形
+        for (const auto& f : faces) {
+            int a = f[0], b = f[1], c = f[2];
+            int ab = getMidpoint(a, b);
+            int bc = getMidpoint(b, c);
+            int ca = getMidpoint(c, a);
+
+            // 保持右手定则（法向向外）
+            newFaces.push_back({ a, ab, ca });
+            newFaces.push_back({ b, bc, ab });
+            newFaces.push_back({ c, ca, bc });
+            newFaces.push_back({ ab, bc, ca });
+        }
+        faces = std::move(newFaces);
+    }
+
+    // === 3. 应用缩放与平移（单位球 → 目标球）===
+    points.reserve(verts.size());
+    for (const Vec3d& v : verts) {
+        points.push_back(center + v * radius);
+    }
+
+    // === 4. 构建TriMesh专用索引格式（1-based + 0分隔）===
+    indices.reserve(faces.size() * 4);
+    for (const auto& f : faces) {
+        indices.push_back(f[0] + 1); // 转1-based
+        indices.push_back(f[1] + 1);
+        indices.push_back(f[2] + 1);
+        indices.push_back(0);        // 面分隔符
+    }
 }

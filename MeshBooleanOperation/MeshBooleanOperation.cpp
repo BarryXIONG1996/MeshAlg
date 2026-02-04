@@ -192,16 +192,21 @@ osg::ref_ptr<osg::Node> createSceneFromTriMesh(const TriMesh& mesh) {
     return geode;
 }
 
-void ShowTriMesh(const TriMesh& mesh)
+void ShowTriMesh(const std::vector<TriMesh>& meshs)
 {
-    if (mesh.points.empty()) {
+    if (meshs.empty()) {
         return;
     }
 
-    osg::ref_ptr<osg::Node> root = createSceneFromTriMesh(mesh);
-    if (!root) {
+    osg::ref_ptr<osg::Group> root = new osg::Group();
+    for (auto const& mesh : meshs) {
+        if (mesh.indices.empty())
+            continue;
+        osg::ref_ptr<osg::Node> node = createSceneFromTriMesh(mesh);
+        root->addChild(node);
+    } 
+    if (root->getNumChildren() < 1)
         return;
-    }
 
     osgViewer::Viewer viewer;
     viewer.setSceneData(root);
@@ -339,14 +344,18 @@ int main() {
     mesh2.BuildFromOBJ("TestSamples/insideCrossSecs-1.obj");
 #endif
 
+#if 0 // 两个球体
+    mesh1.CreateSphere({0,0,0}, 1, 4);
+    mesh2.CreateSphere({1,1,1}, 1, 4);
+#endif
+
     TopoTriMesh* topo1 = new TopoTriMesh;
     topo1->Build(mesh1);
     TopoTriMesh* topo2 = new TopoTriMesh;
     topo2->Build(mesh2);
 
 #ifdef _DRAW
-    ShowTriMesh(mesh1);
-    ShowTriMesh(mesh2);
+    ShowTriMesh({ mesh1,mesh2 });
 #endif
 
     BooleanOperation booleanOp(topo1, topo2, BooleanOperation::INTERSECTION);

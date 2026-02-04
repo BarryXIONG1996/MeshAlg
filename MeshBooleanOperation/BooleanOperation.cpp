@@ -12,7 +12,7 @@ BooleanOperation::BooleanOperation(
 {
 }
 
-extern void ShowTriMesh(const TriMesh& mesh);
+extern void ShowTriMesh(const std::vector<TriMesh>& mesh);
 
  bool BooleanOperation::Execute(TopoTriMesh& res)
 {
@@ -32,9 +32,9 @@ extern void ShowTriMesh(const TriMesh& mesh);
     m_obj->ToMesh(o);
     m_sub->ToMesh(t);
     coPlanes.ToMesh(co);
-    ShowTriMesh(o);
-    ShowTriMesh(t);
-    ShowTriMesh(co);
+    ShowTriMesh({ o });
+    ShowTriMesh({ t });
+    ShowTriMesh({ co });
 #endif
 
     // 2.≤º∂˚‘ÀÀ„
@@ -45,7 +45,7 @@ extern void ShowTriMesh(const TriMesh& mesh);
 #ifdef _DRAW
     TriMesh re;
     res.ToMesh(re);
-    ShowTriMesh(re);
+    ShowTriMesh({ re });
 #endif
 
     return true;

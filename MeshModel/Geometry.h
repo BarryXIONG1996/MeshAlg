@@ -65,5 +65,5 @@ struct MESHMODELDLL TriMesh
 
     void BuildFromOBJ(const std::string& fileName);
     void FixNormalsToOutside(); // 封闭实体法向修正
+    void CreateSphere(const Vec3d& center, double radius, int subdivisionLevel); // nFaces = 8 * 4^n
 };
-

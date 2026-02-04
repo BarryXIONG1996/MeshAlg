@@ -283,7 +283,7 @@ static std::vector<Vec3d> BuildPolygonWithEdgePoints(
     return poly;
 }
 
-void ShowTriMesh(const TriMesh& mesh);
+void ShowTriMesh(const std::vector<TriMesh>& mesh);
 void MeshIntersector::CoPlanarFaceInt(Face* f1, Face* f2)
 {
     std::vector<Vec3d> tri1 = f1->getPnts();

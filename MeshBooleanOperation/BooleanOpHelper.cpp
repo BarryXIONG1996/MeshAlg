@@ -8,7 +8,7 @@ extern const double g_epsilon;
 BooleanOpHelper::BooleanOpHelper(TopoTriMesh& objMesh, TopoTriMesh& subMesh, TopoTriMesh& coPlanes, int opType)
     : m_objMesh(objMesh), m_subMesh(subMesh), m_coPlanes(coPlanes), m_opType(opType) {}
 
-void ShowTriMesh(const TriMesh& mesh);
+void ShowTriMesh(const std::vector<TriMesh>& mesh);
 
 // 主执行函数
 bool BooleanOpHelper::Execute(TopoTriMesh& res) {
@@ -26,10 +26,10 @@ bool BooleanOpHelper::Execute(TopoTriMesh& res) {
     Moint.ToMesh(oint);
     Mtouto.ToMesh(touto);
     Mtino.ToMesh(tino);
-    ShowTriMesh(oout);
-    ShowTriMesh(oint);
-    ShowTriMesh(touto);
-    ShowTriMesh(tino);
+    ShowTriMesh({ oout });
+    ShowTriMesh({ oint });
+    ShowTriMesh({ touto });
+    ShowTriMesh({ tino });
 #endif
 
     // Step 2: 共面部分

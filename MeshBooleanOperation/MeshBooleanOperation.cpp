@@ -335,9 +335,7 @@ int main() {
 
 #if 1 // 隧道内空，右侧电缆槽
     mesh1.BuildFromOBJ("TestSamples/rightCCSec3d-1.obj");
-    for (int i = 0; i < mesh1.indices.size(); i += 4) {
-        std::swap(mesh1.indices.at(i), mesh1.indices.at(i + 2));
-    }
+    mesh1.FixNormalsToOutside();
     mesh2.BuildFromOBJ("TestSamples/insideCrossSecs-1.obj");
 #endif
 

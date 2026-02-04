@@ -64,5 +64,6 @@ struct MESHMODELDLL TriMesh
     std::vector<Vec3d> points;
 
     void BuildFromOBJ(const std::string& fileName);
+    void FixNormalsToOutside(); // 封闭实体法向修正
 };
 

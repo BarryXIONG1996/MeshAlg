@@ -3,6 +3,11 @@
 #include <fstream>
 #include <sstream>
 #include <cctype>
+#include <array>
+#include <queue>
+#include <cmath>
+#include <algorithm>
+#include <numeric>
 
 const double g_epsilon = 1e-9;
 
@@ -252,4 +257,88 @@ void TriMesh::BuildFromOBJ(const std::string& fileName)
     }
 
     file.close();
+}
+
+void TriMesh::FixNormalsToOutside()
+{
+    if (points.empty() || indices.empty()) return;
+
+    // === 1. 高效解析三角形 (1-based索引) ===
+    std::vector<std::array<int, 3>> tris;
+    for (size_t i = 0, start = 0; i <= indices.size(); ++i) {
+        if (i == indices.size() || indices[i] == 0) {
+            if (i - start == 3)
+                tris.emplace_back(std::array{ indices[start], indices[start + 1], indices[start + 2] });
+            start = i + 1;
+        }
+    }
+    if (tris.empty()) return;
+
+    // === 2. 构建边→三角形映射 (标准化边: min,max; 1-based索引存储避免0歧义) ===
+    std::map<std::pair<int, int>, std::array<int, 2>> edgeMap;
+    for (size_t i = 0; i < tris.size(); ++i) {
+        const auto& t = tris[i];
+        for (int j = 0; j < 3; ++j) {
+            int a = t[j], b = t[(j + 1) % 3];
+            if (a == b) continue; // 跳过退化边
+            auto key = std::minmax(a, b);
+            auto& entry = edgeMap[key];
+            if (entry[0] == 0) entry[0] = static_cast<int>(i) + 1;
+            else if (entry[1] == 0) entry[1] = static_cast<int>(i) + 1;
+            // 非流形边（>2三角形共享）自动跳过：entry[1]被覆盖但后续BFS会因校验跳过
+        }
+    }
+
+    // === 3. BFS统一局部法向 (处理所有连通分量) ===
+    std::vector<bool> visited(tris.size(), false);
+    auto needsFlip = [&](int t1_idx, int a, int b) -> bool {
+        const auto& t1 = tris[t1_idx];
+        for (int k = 0; k < 3; ++k) {
+            if (t1[k] == a && t1[(k + 1) % 3] == b) return true;  // 顺序相同 → 法向相反
+            if (t1[k] == b && t1[(k + 1) % 3] == a) return false; // 顺序相反 → 法向一致
+        }
+        return false; // 理论不可达（边映射已保证存在）
+        };
+
+    for (size_t seed = 0; seed < tris.size(); ++seed) {
+        if (visited[seed]) continue;
+        std::queue<int> q({ static_cast<int>(seed) });
+        visited[seed] = true;
+
+        while (!q.empty()) {
+            int t0_idx = q.front(); q.pop();
+            const auto& t0 = tris[t0_idx];
+
+            for (int j = 0; j < 3; ++j) {
+                int a = t0[j], b = t0[(j + 1) % 3];
+                if (a == b) continue; // 防御性检查（构建时已过滤）
+                auto it = edgeMap.find(std::minmax(a, b));
+                if (it == edgeMap.end() || it->second[1] == 0) continue; // 非流形/无效边跳过
+
+                // 获取相邻三角形索引（转0-based）
+                int t1_idx = (it->second[0] - 1 == t0_idx) ? it->second[1] - 1 : it->second[0] - 1;
+                if (visited[t1_idx]) continue;
+
+                if (needsFlip(t1_idx, a, b))
+                    std::swap(tris[t1_idx][1], tris[t1_idx][2]);
+
+                visited[t1_idx] = true;
+                q.push(t1_idx);
+            }
+        }
+    }
+
+    // === 4. 全局校正：有向体积决定内外朝向 ===
+    double vol = 0.0;
+    for (const auto& t : tris) {
+        const auto& v0 = points[t[0] - 1], & v1 = points[t[1] - 1], & v2 = points[t[2] - 1];
+        vol += v0.Dot(v1.Cross(v2)); // 6倍有向体积
+    }
+    if (vol < 0.0)
+        for (auto& t : tris) std::swap(t[1], t[2]); // 全局翻转
+
+    // === 5. 重建indices (1-based + 0分隔) ===
+    indices.clear();
+    for (const auto& t : tris)
+        indices.insert(indices.end(), { t[0], t[1], t[2], 0 });
 }

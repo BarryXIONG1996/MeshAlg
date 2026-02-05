@@ -1,8 +1,6 @@
 #include "MeshIntersector.h"
 #include <GeomCalc.h>
-#include <memory>
 #include <cmath>
-#include <set>
 
 // 定义 M_PI 和 M_E，防止未声明错误
 #ifndef M_PI
@@ -535,7 +533,7 @@ static std::pair<int, std::set<std::pair<Edge*, Face*>>> BuildEfsForFaceIntersec
     if (info.type == TopoType::EdgeType) {
         Edge* e = static_cast<Edge*>(info.topo);
         if (isEdgeCrossing) { // 边边相交
-            assert(otherE, "边无效！");
+            assert(otherE);
             if (e->lF) efs.insert({ otherE,e->lF });
             if (e->rF) efs.insert({ otherE,e->rF });
             if (otherE->lF) efs.insert({ e,otherE->lF });
@@ -693,13 +691,13 @@ void MeshIntersector::NonCoPlanarFaceInt(Face* f1, Face* f2)
             }
             if (isSamePnt) break;
             int otherIntIdx = *indices.begin();
-            assert(indices.size() < 2, "边面交点数目大于2!");
+            assert(indices.size() < 2);
             double w = weights.at(intIdx);
             double otherIntW = m_weights.at(otherIntIdx);
             if (w >= 2.0 && otherIntW >= 2.0) { // 线面共面，此时可以有两个交点
                 m_intersectPnts.push_back(intPnts.at(intIdx));
                 m_weights.push_back(w);
-                int segEndIdx = m_intersectPnts.size() - 1;
+                int segEndIdx = static_cast<int>(m_intersectPnts.size()) - 1;
                 seg.push_back(segEndIdx);
             }
             else { // 非线面共面，只能有一个交点，取高权重点
@@ -719,14 +717,14 @@ void MeshIntersector::NonCoPlanarFaceInt(Face* f1, Face* f2)
         else {
             m_intersectPnts.push_back(intPnts.at(intIdx));
             m_weights.push_back(weights.at(intIdx));
-            int segEndIdx = m_intersectPnts.size() - 1;
+            int segEndIdx = static_cast<int>(m_intersectPnts.size()) - 1;
             seg.push_back(segEndIdx);
             for (auto const& ef : efs)
                 m_ef2Int.insert({ ef, {(int)segEndIdx} });
         }
     }
     m_intSegs.push_back({ seg.front(),seg.back() });
-    int intSegIndex = m_intSegs.size() - 1;
+    int intSegIndex = static_cast<int>(m_intSegs.size()) - 1;
     m_face2Segs[f1].insert(intSegIndex);
     m_face2Segs[f2].insert(intSegIndex);
 }

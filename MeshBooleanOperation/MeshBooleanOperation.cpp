@@ -26,7 +26,7 @@
 #include <exception>
 #include <numeric>
 
-#if 0 // 正确性测试
+#if 1 // 正确性测试
 // Helper function to add a cube centered at (cx, cy, cz) with side length 'side'
 void AddCube(TriMesh& mesh, double cx, double cy, double cz, double side) {
     // Define the vertices of the cube
@@ -355,9 +355,18 @@ int main() {
     mesh2.BuildFromOBJ("TestSamples/insideCrossSecs-1.obj");
 #endif
 
-#if 1 // 两个球体
-    mesh1.CreateSphere({0,0,0}, 1, 0);
-    mesh2.CreateSphere({1,1,1}, 1, 0);
+#if 0 // 两个球体
+    mesh1.CreateSphere({0,0,0}, 1, 6);
+    mesh2.CreateSphere({1,1,1}, 1, 6);
+#endif
+
+#if 1 // Two Bunnys
+    mesh1.BuildFromOBJ("TestSamples/bunny.obj");
+    mesh2.BuildFromOBJ("TestSamples/bunny.obj");
+    Mat4d scale = Mat4d::Scaling({100,100,100});
+    mesh1.Transform(scale), mesh2.Transform(scale);
+    Mat4d trans = Mat4d::Translation(Vec3d{ 10,0,0 });
+    mesh2.Transform(trans);
 #endif
 
     TopoTriMesh* topo1 = new TopoTriMesh;
@@ -369,7 +378,7 @@ int main() {
     ShowTriMesh({ mesh1,mesh2 });
 #endif
 
-    BooleanOperation booleanOp(topo1, topo2, BooleanOperation::INTERSECTION);
+    BooleanOperation booleanOp(topo1, topo2, BooleanOperation::DIFFERENCE);
     TopoTriMesh res;
     booleanOp.Execute(res);
      

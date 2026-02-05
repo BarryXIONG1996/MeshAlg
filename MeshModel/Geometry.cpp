@@ -1,5 +1,3 @@
-#include "Geometry.h"
-
 #include <fstream>
 #include <sstream>
 #include <cctype>
@@ -9,8 +7,134 @@
 #include <algorithm>
 #include <numeric>
 #include <limits>
+#include <cassert>
+
+#include "Geometry.h"
 
 const double g_epsilon = 1e-9;
+
+// ========== 构造函数定义 ==========
+Mat4d::Mat4d() {
+    SetIdentity();
+}
+
+Mat4d::Mat4d(const double* data) {
+    std::copy(data, data + 16, m);
+}
+
+Mat4d::Mat4d(double m00, double m01, double m02, double m03,
+    double m10, double m11, double m12, double m13,
+    double m20, double m21, double m22, double m23,
+    double m30, double m31, double m32, double m33)
+{
+    m[0] = m00; m[4] = m01; m[8] = m02; m[12] = m03;
+    m[1] = m10; m[5] = m11; m[9] = m12; m[13] = m13;
+    m[2] = m20; m[6] = m21; m[10] = m22; m[14] = m23;
+    m[3] = m30; m[7] = m31; m[11] = m32; m[15] = m33;
+}
+
+// ========== 静态工厂函数定义 ==========
+Mat4d Mat4d::Identity() {
+    return Mat4d(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1);
+}
+
+Mat4d Mat4d::Translation(const Vec3d& t) {
+    return Mat4d(1, 0, 0, t.x, 0, 1, 0, t.y, 0, 0, 1, t.z, 0, 0, 0, 1);
+}
+
+Mat4d Mat4d::Scaling(const Vec3d& s) {
+    return Mat4d(s.x, 0, 0, 0, 0, s.y, 0, 0, 0, 0, s.z, 0, 0, 0, 0, 1);
+}
+
+Mat4d Mat4d::Rotation(const Vec3d& axis, double angle) {
+    // 罗德里格斯旋转公式
+    // 将向量分解为平行 / 垂直于旋转轴的两个分量
+    // 旋转垂直分量（平面内旋转）
+    Vec3d k = axis.Normalization();
+    double c = std::cos(angle);
+    double s = std::sin(angle);
+    double omc = 1.0 - c;
+
+    double xx = k.x * k.x, yy = k.y * k.y, zz = k.z * k.z;
+    double xy = k.x * k.y, xz = k.x * k.z, yz = k.y * k.z;
+
+    return Mat4d(
+        xx * omc + c, xy * omc - k.z * s, xz * omc + k.y * s, 0,
+        xy * omc + k.z * s, yy * omc + c, yz * omc - k.x * s, 0,
+        xz * omc - k.y * s, yz * omc + k.x * s, zz * omc + c, 0,
+        0, 0, 0, 1
+    );
+}
+
+Mat4d Mat4d::RotationX(double angle) {
+    /*y' = y·cosθ - z·sinθ
+      z' = y·sinθ + z·cosθ*/
+    double c = std::cos(angle), s = std::sin(angle);
+    return Mat4d(1, 0, 0, 0, 0, c, -s, 0, 0, s, c, 0, 0, 0, 0, 1);
+}
+
+Mat4d Mat4d::RotationY(double angle) {
+    double c = std::cos(angle), s = std::sin(angle);
+    return Mat4d(c, 0, s, 0, 0, 1, 0, 0, -s, 0, c, 0, 0, 0, 0, 1);
+}
+
+Mat4d Mat4d::RotationZ(double angle) {
+    double c = std::cos(angle), s = std::sin(angle);
+    return Mat4d(c, -s, 0, 0, s, c, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1);
+}
+
+// ========== 成员函数定义 ==========
+void Mat4d::SetIdentity() {
+    std::fill(std::begin(m), std::end(m), 0.0);
+    m[0] = m[5] = m[10] = m[15] = 1.0;
+}
+
+void Mat4d::Transpose() {
+    std::swap(m[1], m[4]); std::swap(m[2], m[8]); std::swap(m[3], m[12]);
+    std::swap(m[6], m[9]); std::swap(m[7], m[13]); std::swap(m[11], m[14]);
+}
+
+Mat4d Mat4d::operator*(const Mat4d& other) const {
+    Mat4d res;
+    for (int col = 0; col < 4; ++col) {
+        double c0 = m[col * 4 + 0], c1 = m[col * 4 + 1], c2 = m[col * 4 + 2], c3 = m[col * 4 + 3];
+        res.m[col * 4 + 0] = c0 * other.m[0] + c1 * other.m[1] + c2 * other.m[2] + c3 * other.m[3];
+        res.m[col * 4 + 1] = c0 * other.m[4] + c1 * other.m[5] + c2 * other.m[6] + c3 * other.m[7];
+        res.m[col * 4 + 2] = c0 * other.m[8] + c1 * other.m[9] + c2 * other.m[10] + c3 * other.m[11];
+        res.m[col * 4 + 3] = c0 * other.m[12] + c1 * other.m[13] + c2 * other.m[14] + c3 * other.m[15];
+    }
+    return res;
+}
+
+Vec3d Mat4d::TransformPoint(const Vec3d& v) const {
+    double x = m[0] * v.x + m[4] * v.y + m[8] * v.z + m[12];
+    double y = m[1] * v.x + m[5] * v.y + m[9] * v.z + m[13];
+    double z = m[2] * v.x + m[6] * v.y + m[10] * v.z + m[14];
+    double w = m[3] * v.x + m[7] * v.y + m[11] * v.z + m[15];
+    if (std::abs(w) > 1e-12) {
+        double invW = 1.0 / w;
+        x *= invW; y *= invW; z *= invW;
+    }
+    return Vec3d{ x, y, z };
+}
+
+Vec3d Mat4d::TransformVector(const Vec3d& v) const {
+    return Vec3d{
+        m[0] * v.x + m[4] * v.y + m[8] * v.z,
+        m[1] * v.x + m[5] * v.y + m[9] * v.z,
+        m[2] * v.x + m[6] * v.y + m[10] * v.z
+    };
+}
+
+double& Mat4d::operator()(int row, int col) {
+    assert(row >= 0 && row < 4 && col >= 0 && col < 4);
+    return m[col * 4 + row];
+}
+
+double Mat4d::operator()(int row, int col) const {
+    assert(row >= 0 && row < 4 && col >= 0 && col < 4);
+    return m[col * 4 + row];
+}
 
 Vec2d Vec2d::operator+(const Vec2d& v) const {
     return { x + v.x, y + v.y };
@@ -179,6 +303,13 @@ Vec3d BndBox3d::Center() const {
         (lowerBnd.y + upperBnd.y) / 2,
         (lowerBnd.z + upperBnd.z) / 2,
     };
+}
+
+void TriMesh::Transform(const Mat4d& mat)
+{
+    for (Vec3d& p : points) {
+        p = mat.TransformPoint(p);
+    }
 }
 
 void TriMesh::BuildFromOBJ(const std::string& fileName)

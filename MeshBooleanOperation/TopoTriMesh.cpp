@@ -135,7 +135,7 @@ void TopoTriMesh::RemoveEdge(Edge* e)
 
     // 从边列表中移除 e
     es.erase(std::remove(es.begin(), es.end(), e), es.end());
-    edgeMap.erase({e->v1, e->v2});
+    edgeMap.erase(std::minmax(e->v1, e->v2));
 }
 
 void TopoTriMesh::Reverse()

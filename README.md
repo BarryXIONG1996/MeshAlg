@@ -26,10 +26,14 @@
     <img src="./TestPic/tun2.png" width="120" style="margin: 5px;">
     <img src="./TestPic/tun3.png" width="120" style="margin: 5px;">
     <img src="./TestPic/tun4.png" width="120" style="margin: 5px;">
-</p>
-<p align="center">
     <img src="./TestPic/tun5.png" width="120" style="margin: 5px;">
     <img src="./TestPic/tun6.png" width="120" style="margin: 5px;">
     <img src="./TestPic/tun7.png" width="120" style="margin: 5px;">
     <img src="./TestPic/tun8.png" width="120" style="margin: 5px;">
+    <img src="./TestPic/tun9.png" width="120" style="margin: 5px;">
+</p>
+
+## 效率
+<p align="center">
+    <img src="./TestPic/efficiency.png" width="500" style="margin: 5px;">
 </p>

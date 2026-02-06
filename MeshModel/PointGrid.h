@@ -1,202 +1,426 @@
 #pragma once
-#ifndef POINT_GRID_H
-#define POINT_GRID_H
 
 #include <unordered_map>
 #include <vector>
+#include <array>
 #include <cmath>
 #include <utility>
 #include <stdexcept>
-#include <cassert>
+#include <limits>
+#include <algorithm>
+#include <iterator>
+#include <type_traits>
 #include <cstddef>
-#include "Geometry.h" // 包含 Vec3d 定义
 
-#ifdef MESHMODELDLL_EXPORTS
-#define MESHMODELDLL __declspec(dllexport)
-#else
-#define MESHMODELDLL __declspec(dllimport)
-#endif
+// 默认的2D点结构
+template<typename T = double>
+struct DefaultPoint2D {
+    T x, y;
 
-/**
- * @brief 网格哈希点去重器（std::map 接口兼容版｜工业级安全）
- * @tparam T 关联值类型（Vertex*, size_t, shared_ptr 等）
- *
- * @核心设计:
- * 1. 完全兼容 std::map<Vec3d, T, Cmp> 的公共接口（insert/find/count/operator[]/at）
- * 2. 严格去重语义：‖P-Q‖ < epsilon -> 视为同一点（27邻域+精确距离验证）
- * 3. 安全防护：所有返回引用均为 const，禁止通过迭代器/[] 修改内部值
- * 4. 明确行为：operator[] 不存在时抛异常（拒绝隐式插入），符合去重逻辑
- *
- * @与 std::map 关键差异说明（文档强制要求）:
- * | 操作 | std::map 行为 | PointGrid 行为 | 原因 |
- * |------|----------------|-----------------|------|
- * | operator[] | 不存在时插入 T() | 不存在时抛 std::out_of_range | 避免破坏去重逻辑（隐式插入默认值会导致后续近似点被错误合并） |
- * | insert | 总是插入新元素 | 近似点存在时返回已存在元素+false | 实现几何去重核心语义 |
- * | 迭代器解引用 | pair<const Key, T>& | pair<const Vec3d, T>& | Key 语义为 const（坐标不应被修改） |
- * | 修改值 | 允许 p->second = ... | 禁止（返回 const 引用） | 防止破坏去重拓扑一致性 |
- */
-template<typename T>
-class MESHMODELDLL PointGrid
-{
-private:
-    // ====== 类型别名（严格对标 std::map） ======
-    using key_type = Vec3d;
-    using mapped_type = T;
-    using value_type = std::pair<const Vec3d, T>; // 注意：first 为 const，符合 STL 习惯
-    using size_type = size_t;
+    DefaultPoint2D() : x(0), y(0) {}
+    DefaultPoint2D(T x_, T y_) : x(x_), y(y_) {}
 
-    // ====== 私有辅助结构（MSVC 兼容：置于公有前） ======
-    struct Cell {
-        int x, y, z;
-        bool operator==(const Cell& o) const noexcept {
-            return x == o.x && y == o.y && z == o.z;
-        }
+    DefaultPoint2D operator-(const DefaultPoint2D& o) const {
+        return DefaultPoint2D(x - o.x, y - o.y);
+    }
+
+    T LengthSq() const {
+        return x * x + y * y;
+    }
+};
+
+// 默认的3D点结构
+template<typename T = double>
+struct DefaultPoint3D {
+    T x, y, z;
+
+    DefaultPoint3D() : x(0), y(0), z(0) {}
+    DefaultPoint3D(T x_, T y_, T z_) : x(x_), y(y_), z(z_) {}
+
+    DefaultPoint3D operator-(const DefaultPoint3D& o) const {
+        return DefaultPoint3D(x - o.x, y - o.y, z - o.z);
+    }
+
+    T LengthSq() const {
+        return x * x + y * y + z * z;
+    }
+};
+
+// 检测点维度
+namespace detail {
+    template<typename T, typename = void>
+    struct has_z_member : std::false_type {};
+
+    template<typename T>
+    struct has_z_member<T, decltype(std::declval<T&>().z, void())> : std::true_type {};
+
+    template<typename T>
+    inline constexpr bool has_z_member_v = has_z_member<T>::value;
+
+    template<typename T>
+    struct point_dimension {
+        static constexpr size_t value = has_z_member_v<T> ? 3 : 2;
     };
+
+    template<typename T>
+    inline constexpr size_t point_dimension_v = point_dimension<T>::value;
+}
+
+// 网格计算器模板
+template<size_t Dim>
+struct GridCalculator;
+
+// 2D网格计算器
+template<>
+struct GridCalculator<2> {
+    using Cell = std::array<int64_t, 2>;
 
     struct CellHash {
         size_t operator()(const Cell& c) const noexcept {
-            size_t h1 = std::hash<int>()(c.x);
-            size_t h2 = std::hash<int>()(c.y);
-            size_t h3 = std::hash<int>()(c.z);
-            return h1 ^ (h2 << 1) ^ (h3 << 2) ^ (h1 >> 3);
+            size_t h = std::hash<int64_t>()(c[0]);
+            h ^= std::hash<int64_t>()(c[1]) + 0x9e3779b9 + (h << 6) + (h >> 2);
+            return h;
         }
     };
 
-    // ====== 存储结构（关键：存储 pair<const Vec3d, T>） ======
-    // 为满足 value_type = pair<const Vec3d, T>，内部使用 pair<Vec3d, T> 存储，
-    // 但迭代器/接口层强制视为 const（通过类型转换安全实现）
-    using StoragePair = std::pair<Vec3d, T>;
-    std::unordered_map<Cell, std::vector<StoragePair>, CellHash> grid_;
+    static constexpr size_t neighbor_count = 9;
+    static constexpr std::array<Cell, neighbor_count> neighbor_offsets = []() {
+        std::array<Cell, neighbor_count> offsets{};
+        size_t idx = 0;
+        for (int64_t dx = -1; dx <= 1; ++dx)
+            for (int64_t dy = -1; dy <= 1; ++dy)
+                offsets[idx++] = { dx, dy };
+        return offsets;
+        }();
 
-    const double cell_size_;
-    const double cell_size_inv_;
-    const double eps_sq_;
+        template<typename Point>
+        static Cell compute_cell(const Point& p, double cell_size_inv) noexcept {
+            constexpr double MAX_SAFE = static_cast<double>(1LL << 53);
+            auto safe_floor = [](double val) -> int64_t {
+                if (!std::isfinite(val)) return 0;
+                if (val >= MAX_SAFE) return std::numeric_limits<int64_t>::max() - 1;
+                if (val <= -MAX_SAFE) return std::numeric_limits<int64_t>::min() + 1;
+                return static_cast<int64_t>(std::floor(val));
+                };
+            return { safe_floor(p.x * cell_size_inv), safe_floor(p.y * cell_size_inv) };
+        }
 
-    // ====== 私有工具函数 ======
-    Cell ComputeCell(const Vec3d& p) const noexcept {
-        return {
-            static_cast<int>(std::floor(p.x * cell_size_inv_)),
-            static_cast<int>(std::floor(p.y * cell_size_inv_)),
-            static_cast<int>(std::floor(p.z * cell_size_inv_))
-        };
+        template<typename Point1, typename Point2>
+        static auto distance_sq(const Point1& a, const Point2& b) {
+            auto dx = a.x - b.x;
+            auto dy = a.y - b.y;
+            return dx * dx + dy * dy;
+        }
+
+        template<typename Func>
+        static void for_each_neighbor(const Cell& base_cell, Func&& func) {
+            for (const auto& offset : neighbor_offsets) {
+                Cell neighbor{ base_cell[0] + offset[0], base_cell[1] + offset[1] };
+                func(neighbor);
+            }
+        }
+};
+
+// 3D网格计算器
+template<>
+struct GridCalculator<3> {
+    using Cell = std::array<int64_t, 3>;
+
+    struct CellHash {
+        size_t operator()(const Cell& c) const noexcept {
+            size_t h = std::hash<int64_t>()(c[0]);
+            h ^= std::hash<int64_t>()(c[1]) + 0x9e3779b9 + (h << 6) + (h >> 2);
+            h ^= std::hash<int64_t>()(c[2]) + 0x9e3779b9 + (h << 6) + (h >> 2);
+            return h;
+        }
+    };
+
+    static constexpr size_t neighbor_count = 27;
+    static constexpr std::array<Cell, neighbor_count> neighbor_offsets = []() {
+        std::array<Cell, neighbor_count> offsets{};
+        size_t idx = 0;
+        for (int64_t dx = -1; dx <= 1; ++dx)
+            for (int64_t dy = -1; dy <= 1; ++dy)
+                for (int64_t dz = -1; dz <= 1; ++dz)
+                    offsets[idx++] = { dx, dy, dz };
+        return offsets;
+        }();
+
+        template<typename Point>
+        static Cell compute_cell(const Point& p, double cell_size_inv) noexcept {
+            constexpr double MAX_SAFE = static_cast<double>(1LL << 53);
+            auto safe_floor = [](double val) -> int64_t {
+                if (!std::isfinite(val)) return 0;
+                if (val >= MAX_SAFE) return std::numeric_limits<int64_t>::max() - 1;
+                if (val <= -MAX_SAFE) return std::numeric_limits<int64_t>::min() + 1;
+                return static_cast<int64_t>(std::floor(val));
+                };
+            return {
+                safe_floor(p.x * cell_size_inv),
+                safe_floor(p.y * cell_size_inv),
+                safe_floor(p.z * cell_size_inv)
+            };
+        }
+
+        template<typename Point1, typename Point2>
+        static auto distance_sq(const Point1& a, const Point2& b) {
+            auto dx = a.x - b.x;
+            auto dy = a.y - b.y;
+            auto dz = a.z - b.z;
+            return dx * dx + dy * dy + dz * dz;
+        }
+
+        template<typename Func>
+        static void for_each_neighbor(const Cell& base_cell, Func&& func) {
+            for (const auto& offset : neighbor_offsets) {
+                Cell neighbor{ base_cell[0] + offset[0], base_cell[1] + offset[1], base_cell[2] + offset[2] };
+                func(neighbor);
+            }
+        }
+};
+
+// 主模板
+template<typename T, typename Point = DefaultPoint3D<double>>
+class PointGrid {
+private:
+    static constexpr size_t DIM = detail::point_dimension_v<Point>;
+    static_assert(DIM == 2 || DIM == 3, "Point type must be 2D (x,y) or 3D (x,y,z)");
+
+    using Calculator = GridCalculator<DIM>;
+    using Cell = typename Calculator::Cell;
+    using CellHash = typename Calculator::CellHash;
+    using StorageVector = std::vector<std::pair<Point, T>>;
+    using GridMap = std::unordered_map<Cell, StorageVector, CellHash>;
+
+    GridMap grid_;
+    double cell_size_;
+    double cell_size_inv_;
+    double eps_sq_;
+    size_t total_size_ = 0;
+
+    // 前向声明迭代器类
+    class const_iterator;
+    class iterator;
+
+    // 核心插入逻辑
+    template<typename Key, typename Val>
+    std::pair<iterator, bool> insert_impl(Key&& key, Val&& val) {
+        if (auto it = find(key); it != end())
+            return { it, false };
+
+        Cell cell = Calculator::compute_cell(key, cell_size_inv_);
+        auto& vec = grid_[cell];
+        auto vec_it = vec.emplace(
+            vec.end(),
+            std::forward<Key>(key),
+            std::forward<Val>(val)
+        );
+        ++total_size_;
+        return { iterator(grid_.find(cell), vec_it, this), true };
     }
 
-    // 安全转换：StoragePair* -> value_type*（仅用于迭代器解引用）
-    static const value_type* ToValueTypePtr(const StoragePair* p) noexcept {
-        // reinterpret_cast 安全：仅改变 first 的 const 限定符，内存布局完全相同
-        return reinterpret_cast<const value_type*>(p);
+    void initialize(double epsilon) {
+        if (epsilon <= 0)
+            throw std::invalid_argument("epsilon must be positive");
+        constexpr double MIN_EPS = 1e-12;
+        cell_size_ = std::max(epsilon, MIN_EPS);
+        cell_size_inv_ = 1.0 / cell_size_;
+        eps_sq_ = cell_size_ * cell_size_;
     }
 
 public:
-    // ==================== 迭代器（严格对标 std::map::const_iterator） ====================
-    class const_iterator {
-        friend class PointGrid;
-        using GridIt = typename decltype(grid_)::const_iterator;
-        using CellVecIt = typename std::vector<StoragePair>::const_iterator;
+    // 在public部分重新声明迭代器类型
+    class const_iterator;
+    class iterator;
 
-        GridIt outer_;
-        CellVecIt inner_;
+    using key_type = Point;
+    using mapped_type = T;
+    using value_type = std::pair<key_type, mapped_type>;
+    using size_type = std::size_t;
+    using difference_type = std::ptrdiff_t;
+
+    // ============ 迭代器实现 ============
+    class const_iterator {
+    private:
+        using GridIter = typename GridMap::const_iterator;
+        using VecIter = typename StorageVector::const_iterator;
+
+        GridIter grid_it_;
+        GridIter grid_end_;
+        VecIter vec_it_;
         const PointGrid* parent_;
 
-        const_iterator(GridIt o, CellVecIt i, const PointGrid* p)
-            : outer_(o), inner_(i), parent_(p) {}
+        void advance() noexcept {
+            while (grid_it_ != grid_end_ && vec_it_ == grid_it_->second.end()) {
+                ++grid_it_;
+                if (grid_it_ != grid_end_)
+                    vec_it_ = grid_it_->second.begin();
+            }
+        }
 
     public:
-        using value_type = PointGrid::value_type; // pair<const Vec3d, T>
-        using reference = const value_type&;
-        using pointer = const value_type*;
-        using difference_type = std::ptrdiff_t;
         using iterator_category = std::forward_iterator_tag;
+        using value_type = PointGrid::value_type;
+        using difference_type = PointGrid::difference_type;
+        using pointer = const value_type*;
+        using reference = const value_type&;
+
+        const_iterator() noexcept : parent_(nullptr) {}
+
+        // 默认构造的迭代器指向end
+        const_iterator(GridIter g, VecIter v, const PointGrid* p) noexcept
+            : grid_it_(g), grid_end_(p ? p->grid_.end() : GridIter{}),
+            vec_it_(v), parent_(p) {
+            if (parent_ && grid_it_ != grid_end_) advance();
+        }
 
         reference operator*() const noexcept {
-            return *PointGrid::ToValueTypePtr(&*inner_);
+            if (parent_ == nullptr)
+                throw std::runtime_error("Dereferencing end iterator");
+            return *vec_it_;
         }
+
         pointer operator->() const noexcept {
-            return PointGrid::ToValueTypePtr(&*inner_);
+            if (parent_ == nullptr)
+                throw std::runtime_error("Dereferencing end iterator");
+            return &*vec_it_;
         }
 
         const_iterator& operator++() {
-            if (outer_ == parent_->grid_.end()) return *this;
-            ++inner_;
-            while (outer_ != parent_->grid_.end() && inner_ == outer_->second.end()) {
-                ++outer_;
-                if (outer_ != parent_->grid_.end()) inner_ = outer_->second.begin();
+            if (parent_ && grid_it_ != grid_end_) {
+                ++vec_it_;
+                advance();
             }
             return *this;
         }
 
         const_iterator operator++(int) {
             const_iterator tmp = *this;
-            ++(*this);
+            ++*this;
             return tmp;
         }
 
-        bool operator==(const const_iterator& o) const noexcept {
+        bool operator==(const const_iterator& o) const {
+            // 安全性检查：如果parent_不同，则迭代器必然不相等
             if (parent_ != o.parent_) return false;
-            bool end1 = (outer_ == parent_->grid_.end());
-            bool end2 = (o.outer_ == o.parent_->grid_.end());
-            if (end1 || end2) return end1 == end2;
-            return outer_ == o.outer_ && inner_ == o.inner_;
+            // 如果都是nullptr，都是默认构造的end迭代器
+            if (parent_ == nullptr) return true;
+            // 否则比较内部迭代器
+            return grid_it_ == o.grid_it_ && vec_it_ == o.vec_it_;
         }
 
-        bool operator!=(const const_iterator& o) const noexcept {
-            return !(*this == o);
+        bool operator!=(const const_iterator& o) const { return !(*this == o); }
+    };
+
+    class iterator {
+    private:
+        using GridIter = typename GridMap::iterator;
+        using VecIter = typename StorageVector::iterator;
+
+        GridIter grid_it_;
+        GridIter grid_end_;
+        VecIter vec_it_;
+        PointGrid* parent_;
+
+        void advance() noexcept {
+            while (grid_it_ != grid_end_ && vec_it_ == grid_it_->second.end()) {
+                ++grid_it_;
+                if (grid_it_ != grid_end_)
+                    vec_it_ = grid_it_->second.begin();
+            }
+        }
+
+    public:
+        using iterator_category = std::forward_iterator_tag;
+        using value_type = PointGrid::value_type;
+        using difference_type = PointGrid::difference_type;
+        using pointer = value_type*;
+        using reference = value_type&;
+
+        iterator() noexcept : parent_(nullptr) {}
+
+        iterator(GridIter g, VecIter v, PointGrid* p) noexcept
+            : grid_it_(g), grid_end_(p ? p->grid_.end() : GridIter{}),
+            vec_it_(v), parent_(p) {
+            if (parent_ && grid_it_ != grid_end_) advance();
+        }
+
+        reference operator*() const noexcept {
+            if (parent_ == nullptr)
+                throw std::runtime_error("Dereferencing end iterator");
+            return *vec_it_;
+        }
+
+        pointer operator->() const noexcept {
+            if (parent_ == nullptr)
+                throw std::runtime_error("Dereferencing end iterator");
+            return &*vec_it_;
+        }
+
+        iterator& operator++() {
+            if (parent_ && grid_it_ != grid_end_) {
+                ++vec_it_;
+                advance();
+            }
+            return *this;
+        }
+
+        iterator operator++(int) {
+            iterator tmp = *this;
+            ++*this;
+            return tmp;
+        }
+
+        bool operator==(const iterator& o) const {
+            if (parent_ != o.parent_) return false;
+            if (parent_ == nullptr) return true;
+
+            // 简化：比较grid_it_，如果都指向end，则相等
+            if (grid_it_ == grid_end_ && o.grid_it_ == o.grid_end_)
+                return true;
+
+            // 否则需要完整比较
+            return grid_it_ == o.grid_it_ && vec_it_ == o.vec_it_;
+        }
+
+        bool operator!=(const iterator& o) const { return !(*this == o); }
+
+        operator const_iterator() const {
+            return const_iterator(grid_it_, vec_it_, parent_);
         }
     };
 
-    using iterator = const_iterator; // 仅提供 const 迭代器（禁止修改）
-
-    // ==================== 构造/析构 ====================
-    explicit PointGrid(double epsilon)
-        : cell_size_(epsilon > 1e-12 ? epsilon : 1e-6)
-        , cell_size_inv_(1.0 / cell_size_)
-        , eps_sq_(cell_size_* cell_size_)
-    {
-        assert(epsilon > 0 && "epsilon must be positive");
-    }
-
+    // ============ 构造/析构 ============
+    explicit PointGrid(double eps = 1e-6) { initialize(eps); }
+    PointGrid(const PointGrid&) = default;
+    PointGrid(PointGrid&&) noexcept = default;
+    PointGrid& operator=(const PointGrid&) = default;
+    PointGrid& operator=(PointGrid&&) noexcept = default;
     ~PointGrid() = default;
-    PointGrid(const PointGrid&) = delete;
-    PointGrid& operator=(const PointGrid&) = delete;
 
-    // ==================== std::map 核心接口（完全兼容） ====================
-
-    /**
-     * @brief 插入元素（去重核心）
-     * @param value std::pair<Vec3d, T>（注意：first 非 const，但存储后视为 const）
-     * @return pair<iterator, bool>
-     *   - bool=true: 新插入，iterator 指向新元素
-     *   - bool=false: 存在近似点，iterator 指向已存在元素（值未被覆盖！）
-     * @note 与 std::map::insert 行为差异：
-     *       std::map 总是插入新元素；PointGrid 在近似点存在时拒绝插入并返回已有元素
-     */
-    std::pair<iterator, bool> insert(const value_type& value) {
-        return insert_impl(value.first, value.second);
+    // ============ 容量 ============
+    bool empty() const noexcept { return total_size_ == 0; }
+    size_type size() const noexcept { return total_size_; }
+    void clear() noexcept {
+        grid_.clear();
+        total_size_ = 0;
     }
+    void reserve(size_type n) { grid_.reserve(n); }
+    size_type bucket_count() const noexcept { return grid_.bucket_count(); }
 
-    std::pair<iterator, bool> insert(value_type&& value) {
-        return insert_impl(std::move(value.first), std::move(value.second));
-    }
+    // ============ 查找 ============
+    iterator find(const key_type& key) {
+        Cell base = Calculator::compute_cell(key, cell_size_inv_);
 
-    /**
-     * @brief 查询元素（对标 std::map::find）
-     * @return 指向元素的迭代器；不存在则返回 end()
-     * @note 与 std::map::find 行为一致（仅查询，不插入）
-     */
-    iterator find(const key_type& key) const noexcept {
-        Cell base = ComputeCell(key);
-        for (int dx = -1; dx <= 1; ++dx) {
-            for (int dy = -1; dy <= 1; ++dy) {
-                for (int dz = -1; dz <= 1; ++dz) {
-                    Cell nb{ base.x + dx, base.y + dy, base.z + dz };
-                    auto cell_it = grid_.find(nb);
-                    if (cell_it == grid_.end()) continue;
+        for (const auto& offset : Calculator::neighbor_offsets) {
+            Cell nb = base;
+            for (size_t i = 0; i < DIM; ++i) nb[i] += offset[i];
 
-                    const auto& cell_vec = cell_it->second;
-                    for (auto vec_it = cell_vec.begin(); vec_it != cell_vec.end(); ++vec_it) {
-                        if ((vec_it->first - key).LengthSquared() < eps_sq_) {
-                            return iterator(cell_it, vec_it, this);
-                        }
+            auto cell_it = grid_.find(nb);
+            if (cell_it != grid_.end()) {
+                for (auto vec_it = cell_it->second.begin(); vec_it != cell_it->second.end(); ++vec_it) {
+                    if (Calculator::distance_sq(vec_it->first, key) < eps_sq_) {
+                        return iterator(cell_it, vec_it, this);
                     }
                 }
             }
@@ -204,110 +428,225 @@ public:
         return end();
     }
 
-    /**
-     * @brief 计数（对标 std::map::count）
-     * @return 0 或 1（去重保证唯一点）
-     */
-    size_type count(const key_type& key) const noexcept {
-        return find(key) != end() ? 1 : 0;
-    }
+    const_iterator find(const key_type& key) const {
+        Cell base = Calculator::compute_cell(key, cell_size_inv_);
 
-    /**
-     * @brief 安全访问（对标 std::map::at）
-     * @return 元素的 const 引用；不存在则抛 std::out_of_range
-     */
-    const mapped_type& at(const key_type& key) const {
-        auto it = find(key);
-        if (it == end()) {
-            throw std::out_of_range("PointGrid::at: key not found (within epsilon)");
-        }
-        return it->second;
-    }
+        for (const auto& offset : Calculator::neighbor_offsets) {
+            Cell nb = base;
+            for (size_t i = 0; i < DIM; ++i) nb[i] += offset[i];
 
-    /**
-     * @brief 下标访问（对标 std::map::operator[]，但行为关键差异！）
-     * @return 元素的 const 引用
-     * @throw std::out_of_range 若点不存在（拒绝隐式插入！）
-     * @warning 与 std::map 的核心差异：
-     *          std::map 在 key 不存在时插入 T()；PointGrid 严格抛异常
-     *          原因：隐式插入默认值会破坏去重逻辑（后续近似点将错误合并到默认值）
-     *          使用前务必确认点已通过 insert() 插入！
-     */
-    const mapped_type& operator[](const key_type& key) const {
-        return at(key);
-    }
-
-    // 非 const 对象调用也返回 const 引用（禁止修改）
-    const mapped_type& operator[](const key_type& key) {
-        return const_cast<const PointGrid*>(this)->at(key);
-    }
-
-    // ==================== 迭代器接口（完全对标 std::map） ====================
-    iterator begin() const noexcept {
-        if (grid_.empty()) return end();
-        auto it = grid_.begin();
-        return iterator(it, it->second.begin(), this);
-    }
-
-    iterator end() const noexcept {
-        return iterator(grid_.end(), {}, this);
-    }
-
-    iterator cbegin() const noexcept { return begin(); }
-    iterator cend() const noexcept { return end(); }
-
-    // ==================== 辅助接口 ====================
-    void clear() noexcept { grid_.clear(); }          // 小写：对标 STL
-    bool empty() const noexcept { return grid_.empty(); }
-    size_type size() const noexcept {                 // 对标 STL
-        size_type cnt = 0;
-        for (const auto& cell : grid_) cnt += cell.second.size();
-        return cnt;
-    }
-    double epsilon() const noexcept { return cell_size_; } // 小写：符合 STL 命名习惯
-
-private:
-    // insert 的实现核心（避免代码重复）
-    template<typename Key, typename Val>
-    std::pair<iterator, bool> insert_impl(Key&& key, Val&& val) {
-        Cell base = ComputeCell(key);
-
-        // 检查 27 邻域（含自身）
-        for (int dx = -1; dx <= 1; ++dx) {
-            for (int dy = -1; dy <= 1; ++dy) {
-                for (int dz = -1; dz <= 1; ++dz) {
-                    Cell nb{ base.x + dx, base.y + dy, base.z + dz };
-                    auto cell_it = grid_.find(nb);
-                    if (cell_it == grid_.end()) continue;
-
-                    auto& cell_vec = cell_it->second;
-                    for (auto vec_it = cell_vec.begin(); vec_it != cell_vec.end(); ++vec_it) {
-                        if ((vec_it->first - key).LengthSquared() < eps_sq_) {
-                            // 找到近似点：返回已有元素迭代器 + false（拒绝插入）
-                            return { iterator(cell_it, vec_it, this), false };
-                        }
+            auto cell_it = grid_.find(nb);
+            if (cell_it != grid_.end()) {
+                for (auto vec_it = cell_it->second.begin(); vec_it != cell_it->second.end(); ++vec_it) {
+                    if (Calculator::distance_sq(vec_it->first, key) < eps_sq_) {
+                        return const_iterator(cell_it, vec_it, this);
                     }
                 }
             }
         }
+        return cend();
+    }
 
-        // 无近似点：插入新元素
-        auto cell_it = grid_.find(base);
-        if (cell_it == grid_.end()) {
-            cell_it = grid_.emplace(base, std::vector<StoragePair>()).first;
+    bool contains(const key_type& key) const { return find(key) != cend(); }
+    size_type count(const key_type& key) const { return contains(key) ? 1 : 0; }
+
+    // ============ 访问 ============
+    const mapped_type& at(const key_type& key) const {
+        if (auto it = find(key); it != cend())
+            return it->second;
+        throw std::out_of_range("PointGrid::at: key not found");
+    }
+
+    mapped_type& at(const key_type& key) {
+        if (auto it = find(key); it != end())
+            return it->second;
+        throw std::out_of_range("PointGrid::at: key not found");
+    }
+
+    mapped_type& operator[](const key_type& key) {
+        auto [it, inserted] = emplace(key, mapped_type{});
+        return it->second;
+    }
+
+    const mapped_type& operator[](const key_type& key) const { return at(key); }
+
+    // ============ 插入 ============
+    std::pair<iterator, bool> insert(const value_type& val) {
+        return insert_impl(val.first, val.second);
+    }
+
+    std::pair<iterator, bool> insert(value_type&& val) {
+        return insert_impl(val.first, std::move(val.second));
+    }
+
+    template<typename P,
+        std::enable_if_t<std::is_constructible_v<value_type, P&&>, int> = 0>
+    std::pair<iterator, bool> insert(P&& val) {
+        return insert_impl(
+            static_cast<const key_type&>(std::forward<P>(val).first),
+            std::forward<P>(val).second
+        );
+    }
+
+    void insert(std::initializer_list<value_type> ilist) {
+        for (const auto& v : ilist) insert(v);
+    }
+
+    template<typename... Args>
+    std::pair<iterator, bool> emplace(const key_type& key, Args&&... args) {
+        return insert_impl(key, mapped_type(std::forward<Args>(args)...));
+    }
+
+    template<typename... Args>
+    std::pair<iterator, bool> emplace(key_type&& key, Args&&... args) {
+        return insert_impl(std::move(key), mapped_type(std::forward<Args>(args)...));
+    }
+
+    template<typename M>
+    std::pair<iterator, bool> insert_or_assign(const key_type& key, M&& obj) {
+        if (auto it = find(key); it != end()) {
+            it->second = std::forward<M>(obj);
+            return { it, false };
         }
-        auto& cell_vec = cell_it->second;
-        size_t idx = cell_vec.size();
-        cell_vec.emplace_back(std::forward<Key>(key), std::forward<Val>(val));
-        return { iterator(cell_it, cell_vec.begin() + idx, this), true };
+        return emplace(key, std::forward<M>(obj));
+    }
+
+    // ============ 删除 ============
+    size_type erase(const key_type& key) {
+        Cell base = Calculator::compute_cell(key, cell_size_inv_);
+
+        for (const auto& offset : Calculator::neighbor_offsets) {
+            Cell nb = base;
+            for (size_t i = 0; i < DIM; ++i) nb[i] += offset[i];
+
+            auto cell_it = grid_.find(nb);
+            if (cell_it != grid_.end()) {
+                auto& vec = cell_it->second;
+                for (auto it = vec.begin(); it != vec.end(); ++it) {
+                    if (Calculator::distance_sq(it->first, key) < eps_sq_) {
+                        vec.erase(it);
+                        if (vec.empty()) grid_.erase(cell_it);
+                        --total_size_;
+                        return 1;
+                    }
+                }
+            }
+        }
+        return 0;
+    }
+
+    iterator erase(iterator pos) {
+        if (pos == end()) return end();
+
+        auto cell_it = pos.grid_it_;
+        auto vec_it = pos.vec_it_;
+        auto& vec = cell_it->second;
+
+        // 保存下一位置
+        ++vec_it;
+        if (vec_it == vec.end()) {
+            ++cell_it;
+            while (cell_it != grid_.end() && cell_it->second.empty()) ++cell_it;
+            vec_it = (cell_it != grid_.end()) ? cell_it->second.begin() : typename StorageVector::iterator{};
+        }
+
+        // 执行删除
+        auto next_vec_it = vec.erase(pos.vec_it_);
+        --total_size_;
+        if (vec.empty()) {
+            auto next_cell_it = grid_.erase(cell_it);
+            return iterator(next_cell_it,
+                (next_cell_it != grid_.end()) ? next_cell_it->second.begin() : typename StorageVector::iterator{},
+                this);
+        }
+        else {
+            return iterator(cell_it, next_vec_it, this);
+        }
+    }
+
+    iterator erase(iterator first, iterator last) {
+        if (first == last) return first;
+        std::vector<key_type> keys;
+        for (auto it = first; it != last; ++it)
+            keys.push_back(it->first);
+        for (const auto& k : keys)
+            erase(k);
+        return end();
+    }
+
+    // ============ 迭代器 ============
+    iterator begin() {
+        auto it = grid_.begin();
+        while (it != grid_.end() && it->second.empty()) ++it;
+        if (it != grid_.end())
+            return iterator(it, it->second.begin(), this);
+        return end();
+    }
+
+    iterator end() {
+        return iterator(grid_.end(), typename StorageVector::iterator{}, this);
+    }
+
+    const_iterator begin() const {
+        auto it = grid_.begin();
+        while (it != grid_.end() && it->second.empty()) ++it;
+        if (it != grid_.end())
+            return const_iterator(it, it->second.begin(), this);
+        return cend();
+    }
+
+    const_iterator end() const {
+        return const_iterator(grid_.end(), typename StorageVector::const_iterator{}, this);
+    }
+
+    const_iterator cbegin() const { return begin(); }
+    const_iterator cend() const { return end(); }
+
+    // ============ 信息查询 ============
+    double epsilon() const noexcept { return cell_size_; }
+    size_type bucket_size(size_type n) const {
+        if (n >= bucket_count())
+            throw std::out_of_range("PointGrid::bucket_size: index out of range");
+        return grid_.bucket_size(n);
+    }
+    double load_factor() const noexcept { return grid_.load_factor(); }
+    double max_load_factor() const noexcept { return grid_.max_load_factor(); }
+    void max_load_factor(float ml) { grid_.max_load_factor(ml); }
+    void rehash(size_type n) { grid_.rehash(n); }
+
+    // ============ 交换 ============
+    void swap(PointGrid& other) {
+        const double max_eps = std::max(cell_size_, other.cell_size_);
+        if (std::abs(cell_size_ - other.cell_size_) > max_eps * 1e-6)
+            throw std::invalid_argument("PointGrid::swap: epsilon mismatch");
+        std::swap(grid_, other.grid_);
+        std::swap(cell_size_, other.cell_size_);
+        std::swap(cell_size_inv_, other.cell_size_inv_);
+        std::swap(eps_sq_, other.eps_sq_);
+        std::swap(total_size_, other.total_size_);
     }
 };
 
-// ==================== 显式实例化声明（按需启用） ====================
-#ifdef MESHMODELDLL_EXPORTS
-extern template class MESHMODELDLL PointGrid<Vertex*>;
-extern template class MESHMODELDLL PointGrid<size_t>;
-extern template class MESHMODELDLL PointGrid<int>;
-#endif
+// 非成员函数
+template<typename T, typename Point>
+void swap(PointGrid<T, Point>& a, PointGrid<T, Point>& b) {
+    a.swap(b);
+}
 
-#endif // POINT_GRID_H
+template<typename T, typename Point>
+bool operator==(const PointGrid<T, Point>& lhs, const PointGrid<T, Point>& rhs) {
+    if (lhs.size() != rhs.size()) return false;
+    const double max_eps = std::max(lhs.epsilon(), rhs.epsilon());
+    if (std::abs(lhs.epsilon() - rhs.epsilon()) > max_eps * 1e-6) return false;
+    for (const auto& elem : lhs) {
+        auto it = rhs.find(elem.first);
+        if (it == rhs.cend() || !(it->second == elem.second))
+            return false;
+    }
+    return true;
+}
+
+template<typename T, typename Point>
+bool operator!=(const PointGrid<T, Point>& lhs, const PointGrid<T, Point>& rhs) {
+    return !(lhs == rhs);
+}

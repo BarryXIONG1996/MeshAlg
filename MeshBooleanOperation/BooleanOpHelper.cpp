@@ -2,8 +2,6 @@
 #include <queue>
 #include <set>
 
-extern const double g_epsilon;
-
 // ¹¹Ôìº¯Êý
 BooleanOpHelper::BooleanOpHelper(TopoTriMesh& objMesh, TopoTriMesh& subMesh, TopoTriMesh& coPlanes, int opType)
     : m_objMesh(objMesh), m_subMesh(subMesh), m_coPlanes(coPlanes), m_opType(opType) {}

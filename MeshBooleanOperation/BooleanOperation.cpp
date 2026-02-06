@@ -2,8 +2,6 @@
 #include "MeshIntersector.h"
 #include "BooleanOpHelper.h"
 
-const double g_epsilon = 1e-9;
-
 BooleanOperation::BooleanOperation(
     TopoTriMesh* operandA,
     TopoTriMesh* operandB,

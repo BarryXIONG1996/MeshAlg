@@ -8,10 +8,11 @@
 #include <numeric>
 #include <limits>
 #include <cassert>
+#include <map>
 
 #include "Geometry.h"
 
-const double g_epsilon = 1e-9;
+double g_epsilon = 1e-12;
 
 // ========== 构造函数定义 ==========
 Mat4d::Mat4d() {
@@ -247,12 +248,6 @@ bool Vec3d::Parallel(const Vec3d& v) const
 bool Vec3d::Equal(const Vec3d& v) const
 {
     return operator-(v).Length() < g_epsilon;
-}
-
-bool Vec3dCmp::operator()(const Vec3d& a, const Vec3d& b) const {
-    if (fabs(a.x - b.x) > g_epsilon) return a.x < b.x;
-    if (fabs(a.y - b.y) > g_epsilon) return a.y < b.y;
-    return a.z < b.z - g_epsilon;
 }
 
 BndBox3d::BndBox3d()
@@ -554,4 +549,14 @@ void TriMesh::CreateSphere(const Vec3d& center, double radius, int subdivisionLe
         indices.push_back(f[2] + 1);
         indices.push_back(0);        // 面分隔符
     }
+}
+
+MESHMODELDLL double GetGlobalPrecision()
+{
+    return g_epsilon;
+}
+
+MESHMODELDLL void SetGlobalPrecision(double epsilon)
+{
+    g_epsilon = epsilon;
 }

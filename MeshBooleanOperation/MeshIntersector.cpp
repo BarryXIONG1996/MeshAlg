@@ -13,8 +13,6 @@
 
 #include "RTree.h"
 
-extern const double g_epsilon;
-
 class RTreeAccelerator : public SpatialAccelerator {
 public:
     virtual void Build(std::vector<Face*> const& faces) override {
@@ -62,7 +60,7 @@ static bool IsPointOnEdgeInterior(const Vec3d& p, Edge* e)
     const Vec3d& a = e->v1->pnt;
     const Vec3d& b = e->v2->pnt;
 
-    const double eps = g_epsilon;
+    const double eps = GetGlobalPrecision();
 
     // Step 1: 检查点是否与端点重合（排除端点）
     if ((p - a).Length() < eps || (p - b).Length() < eps) {
@@ -96,6 +94,8 @@ static std::vector<Vec3d> SortPointsOnEdge(
     const Vec3d& B,
     const std::vector<Vec3d>& pointsOnEdge)
 {
+    double epsilon = GetGlobalPrecision();
+
     std::vector<Vec3d> result;
     if (pointsOnEdge.empty()) return result;
 
@@ -103,7 +103,7 @@ static std::vector<Vec3d> SortPointsOnEdge(
     double len2_AB = AB.Dot(AB);
 
     // 处理退化线段（A == B）
-    if (len2_AB < g_epsilon * g_epsilon) {
+    if (len2_AB < epsilon * epsilon) {
         return { A }; // 所有点都重合于 A
     }
 
@@ -131,7 +131,7 @@ static std::vector<Vec3d> SortPointsOnEdge(
     // 去重（基于 t 的 epsilon 比较）
     result.push_back(ptsWithT.front().p);
     for (size_t i = 1; i < ptsWithT.size(); ++i) {
-        if (ptsWithT[i].t - ptsWithT[i - 1].t > g_epsilon) {
+        if (ptsWithT[i].t - ptsWithT[i - 1].t > epsilon) {
             result.push_back(ptsWithT[i].p);
         }
     }
@@ -201,6 +201,8 @@ std::vector<Vec3d> MeshIntersector::EdgeEdgeInt(Edge* e1, Edge* e2)
 
 void MeshIntersector::FaceFaceInt(Face* f1, Face* f2, std::function<void(Face*, Face*)> intersectFunc, bool coPlanar)
 {
+    double epsilon = GetGlobalPrecision();
+
     if (f1->bbox.IsOut(f2->bbox))
         return;
 
@@ -210,13 +212,13 @@ void MeshIntersector::FaceFaceInt(Face* f1, Face* f2, std::function<void(Face*, 
 
     Vec3d n1 = GeomCalc::CompuateNormal(ps1), n2 = GeomCalc::CompuateNormal(ps2);
 
-    if (n1.Length() < g_epsilon || n2.Length() < g_epsilon)
+    if (n1.Length() < epsilon || n2.Length() < epsilon)
         return;
 
     if (n1.Parallel(n2)) // 面平行
     {
-        if (GeomCalc::Point2PlaneDistatnce(ps2.at(0), ps1.at(0), n1) > g_epsilon
-            || GeomCalc::Point2PlaneDistatnce(ps1.at(0), ps2.at(0), n2) > g_epsilon)
+        if (GeomCalc::Point2PlaneDistatnce(ps2.at(0), ps1.at(0), n1) > epsilon
+            || GeomCalc::Point2PlaneDistatnce(ps1.at(0), ps2.at(0), n2) > epsilon)
             return; // 不共面
 
         // 共面
@@ -407,9 +409,10 @@ struct IntersectionInfo {
 // 判断顶点和面的相对位置关系
 static void  VertexPlaneRelPos(Vertex* v, Vec3d const& o, Vec3d const& n) {
     if (!v) return;
+    double epsilon = GetGlobalPrecision();
     double signDist = GeomCalc::Point2PlaneSignDistance(v->pnt, o, n);
-    if (signDist > g_epsilon) v->posTag = 2; // 0=default, 1=in, 2=out, 3=on
-    else if (signDist < -g_epsilon) v->posTag = 1;
+    if (signDist > epsilon) v->posTag = 2; // 0=default, 1=in, 2=out, 3=on
+    else if (signDist < -epsilon) v->posTag = 1;
     else v->posTag = 3;
 };
 
@@ -570,6 +573,7 @@ static std::pair<int, std::set<std::pair<Edge*, Face*>>> BuildEfsForFaceIntersec
 void MeshIntersector::NonCoPlanarFaceInt(Face* f1, Face* f2)
 {
     // --- 平面求交 ---
+    double epsilon = GetGlobalPrecision();
     auto ps1 = f1->getPnts(), ps2 = f2->getPnts();
     if (ps1.size() < 3 || ps2.size() < 3) return;
 
@@ -581,7 +585,7 @@ void MeshIntersector::NonCoPlanarFaceInt(Face* f1, Face* f2)
 
     // --- 收集交点参数 ---
     struct DbCompare {
-        bool operator()(double a, double b) const { return a < b - g_epsilon; }
+        bool operator()(double a, double b) const { return a < b - GetGlobalPrecision(); }
     };
     using ParamMap = std::map<double, std::tuple<void*, TopoType>, DbCompare>;
     ParamMap param1, param2;
@@ -594,10 +598,10 @@ void MeshIntersector::NonCoPlanarFaceInt(Face* f1, Face* f2)
             double LineT, segT;
             if (!GeomCalc::CalLineSegmentIntersection(intO, intDir, pnts[0], pnts[1], LineT, segT))
                 continue;
-            if (segT < g_epsilon) {
+            if (segT < epsilon) {
                 out[LineT] = { e->v1, TopoType::VertexType };
             }
-            else if (segT > 1 - g_epsilon) {
+            else if (segT > 1 - epsilon) {
                 out[LineT] = { e->v2, TopoType::VertexType };
             }
             else {
@@ -613,7 +617,7 @@ void MeshIntersector::NonCoPlanarFaceInt(Face* f1, Face* f2)
     if (param1.size() < 2 || param2.size() < 2) return;
     double t1_min = param1.begin()->first, t1_max = param1.rbegin()->first;
     double t2_min = param2.begin()->first, t2_max = param2.rbegin()->first;
-    if (t1_max <= t2_min + g_epsilon || t2_max <= t1_min + g_epsilon) return;
+    if (t1_max <= t2_min + epsilon || t2_max <= t1_min + epsilon) return;
 
     // --- 提取端点信息 ---
     auto makeInfo = [](const ParamMap::value_type& kv) {
@@ -630,7 +634,7 @@ void MeshIntersector::NonCoPlanarFaceInt(Face* f1, Face* f2)
     std::vector<std::set<std::pair<Edge*, Face*>>> allEfs;
 
     // --- 处理起点 ---
-    if (std::abs(p1_start.param - p2_start.param) <= g_epsilon) {
+    if (std::abs(p1_start.param - p2_start.param) <= epsilon) {
         auto [w, efs] = BuildEfsAndWeight(p1_start, p2_start, o1, norm1, o2, norm2);
         weights.push_back(w);
         allEfs.push_back(efs);
@@ -650,7 +654,7 @@ void MeshIntersector::NonCoPlanarFaceInt(Face* f1, Face* f2)
     }
 
     // --- 处理终点 ---
-    if (std::abs(p1_end.param - p2_end.param) < g_epsilon) {
+    if (std::abs(p1_end.param - p2_end.param) < epsilon) {
         auto [w, efs] = BuildEfsAndWeight(p1_end, p2_end, o1, norm1, o2, norm2);
         weights.push_back(w);
         allEfs.push_back(efs);
@@ -683,7 +687,7 @@ void MeshIntersector::NonCoPlanarFaceInt(Face* f1, Face* f2)
             bool isSamePnt = false;
             for (int idx : indices) {
                 // 同一交点会在多次求交中遇到，避免重复添加
-                if ((m_intersectPnts.at(idx) - intPnts.at(intIdx)).Length() < g_epsilon) {
+                if ((m_intersectPnts.at(idx) - intPnts.at(intIdx)).Length() < epsilon) {
                     isSamePnt = true;
                     seg.push_back(idx);
                     break;
@@ -824,6 +828,7 @@ void MeshIntersector::ProcessNonCoPlanarIntersectResult()
 
 std::vector<Vec3d> MeshIntersector::ExtractOrderedBoundary(Face* f)
 {
+    double epsilon = GetGlobalPrecision();
     auto const& es = f->getEdges();      // 边列表
     auto const& edir = f->getEdgeDir();  // 每条边的方向：true 表示 v1→v2 与面环绕一致
 
@@ -872,7 +877,7 @@ std::vector<Vec3d> MeshIntersector::ExtractOrderedBoundary(Face* f)
         else {
             // 避免重复连接点：如果当前边起点 ≈ 上一段终点，则跳过第一个点
             auto insertBegin = ePnts.begin();
-            if ((boundary.back() - ePnts.front()).LengthSq() < g_epsilon * g_epsilon) {
+            if ((boundary.back() - ePnts.front()).LengthSq() < epsilon * epsilon) {
                 ++insertBegin;
             }
             boundary.insert(boundary.end(), insertBegin, ePnts.end());

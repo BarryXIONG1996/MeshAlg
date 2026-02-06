@@ -7,10 +7,10 @@
 #endif
 
 #include <vector>
-#include <map>
 #include <string>
 
-extern const double g_epsilon;
+MESHMODELDLL double GetGlobalPrecision();
+MESHMODELDLL void SetGlobalPrecision(double epsilon);
 
 struct Vec3d;
 /**
@@ -79,10 +79,6 @@ struct MESHMODELDLL Vec3d
     Vec3d Normalization() const;
     bool Parallel(const Vec3d& v) const;
     bool Equal(const Vec3d& v) const;
-};
-
-struct MESHMODELDLL Vec3dCmp {
-    bool operator()(const Vec3d& a, const Vec3d& b) const;
 };
 
 struct MESHMODELDLL BndBox3d

@@ -1,10 +1,12 @@
 #include "GeomCalc.h"
+#include "PointGrid.h"
 #include "clipper2/clipper.h"
 #include "CDT/include/CDT.h"
 #include <cmath>
 #include <memory>
 
 using namespace Clipper2Lib;
+extern double g_epsilon;
 
 Vec3d GeomCalc::CompuateNormal(std::vector<Vec3d> const& pnts)
 {
@@ -490,7 +492,7 @@ bool GeomCalc::PolyIntersect(
         if (area < 0) std::reverse(cdtOuter.begin(), cdtOuter.end());
 
         // === 4. 收集所有输入点（3D去重）并构建2D顶点 ===
-        std::map<Vec3d, size_t, Vec3dCmp> pointToIndex;
+        PointGrid<size_t, Vec3d> pointToIndex;
         auto addPoint = [&](const Vec3d& p) {
             auto [it, inserted] = pointToIndex.emplace(p, pointToIndex.size());
             return it->second;
@@ -659,7 +661,7 @@ bool GeomCalc::PolyIntersect(
                 return false;
             }
         };
-        std::map<PointD, std::size_t, PDCompare> pointToIndex;
+        PointGrid<size_t, PointD> pointToIndex;
 
         auto addPathToCDT = [&](const PathD& path) {
             if (path.size() < 3) return;

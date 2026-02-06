@@ -228,9 +228,6 @@ void ShowTriMesh(const std::vector<TriMesh>& meshs)
     viewer.run();
 }
 
-// 假设 Vec3dCmp 已在项目中定义（使用 g_epsilon 容差比较）
-// 若未定义，需补充：struct Vec3dCmp { bool operator()(const Vec3d& a, const Vec3d& b) const { ... } };
-
 void ShowTriMeshWithVertexColor(
     const std::vector<std::vector<Vec3d>>& tris,
     const std::vector<Vec3d>& boundary,
@@ -239,9 +236,9 @@ void ShowTriMeshWithVertexColor(
     if (tris.empty()) return;
 
     // === 1. 构建关键点集合（boundary + intSegs，容差去重）===
-    std::set<Vec3d, Vec3dCmp> keyPoints;
+    PointGrid<int, Vec3d> keyPoints;
     auto addPoints = [&keyPoints](const auto& container) {
-        for (const auto& p : container) keyPoints.insert(p);
+        for (const auto& p : container) keyPoints.insert({ p,0 });
         };
 
     addPoints(boundary);
@@ -363,9 +360,9 @@ int main() {
 #if 1 // Two Bunnys
     mesh1.BuildFromOBJ("TestSamples/bunny.obj");
     mesh2.BuildFromOBJ("TestSamples/bunny.obj");
-    Mat4d scale = Mat4d::Scaling({100,100,100});
+    Mat4d scale = Mat4d::Scaling({10,10,10});
     mesh1.Transform(scale), mesh2.Transform(scale);
-    Mat4d trans = Mat4d::Translation(Vec3d{ 10,0,0 });
+    Mat4d trans = Mat4d::Translation(Vec3d{ 1,0,0 });
     mesh2.Transform(trans);
 #endif
 

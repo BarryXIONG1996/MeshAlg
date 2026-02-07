@@ -12,41 +12,7 @@
 #include <type_traits>
 #include <cstddef>
 
-// Ä¬ÈÏµÄ2Dµã½á¹¹
-template<typename T = double>
-struct DefaultPoint2D {
-    T x, y;
-
-    DefaultPoint2D() : x(0), y(0) {}
-    DefaultPoint2D(T x_, T y_) : x(x_), y(y_) {}
-
-    DefaultPoint2D operator-(const DefaultPoint2D& o) const {
-        return DefaultPoint2D(x - o.x, y - o.y);
-    }
-
-    T LengthSq() const {
-        return x * x + y * y;
-    }
-};
-
-// Ä¬ÈÏµÄ3Dµã½á¹¹
-template<typename T = double>
-struct DefaultPoint3D {
-    T x, y, z;
-
-    DefaultPoint3D() : x(0), y(0), z(0) {}
-    DefaultPoint3D(T x_, T y_, T z_) : x(x_), y(y_), z(z_) {}
-
-    DefaultPoint3D operator-(const DefaultPoint3D& o) const {
-        return DefaultPoint3D(x - o.x, y - o.y, z - o.z);
-    }
-
-    T LengthSq() const {
-        return x * x + y * y + z * z;
-    }
-};
-
-// ¼ì²âµãÎ¬¶È
+// æ£€æµ‹ç‚¹ç»´åº¦
 namespace detail {
     template<typename T, typename = void>
     struct has_z_member : std::false_type {};
@@ -66,11 +32,11 @@ namespace detail {
     inline constexpr size_t point_dimension_v = point_dimension<T>::value;
 }
 
-// Íø¸ñ¼ÆËãÆ÷Ä£°å
+// ç½‘æ ¼è®¡ç®—å™¨æ¨¡æ¿
 template<size_t Dim>
 struct GridCalculator;
 
-// 2DÍø¸ñ¼ÆËãÆ÷
+// 2Dç½‘æ ¼è®¡ç®—å™¨
 template<>
 struct GridCalculator<2> {
     using Cell = std::array<int64_t, 2>;
@@ -121,7 +87,7 @@ struct GridCalculator<2> {
         }
 };
 
-// 3DÍø¸ñ¼ÆËãÆ÷
+// 3Dç½‘æ ¼è®¡ç®—å™¨
 template<>
 struct GridCalculator<3> {
     using Cell = std::array<int64_t, 3>;
@@ -179,7 +145,7 @@ struct GridCalculator<3> {
         }
 };
 
-// Ö÷Ä£°å
+// ä¸»æ¨¡æ¿
 template<typename T, typename Point = DefaultPoint3D<double>>
 class PointGrid {
 private:
@@ -198,11 +164,11 @@ private:
     double eps_sq_;
     size_t total_size_ = 0;
 
-    // Ç°ÏòÉùÃ÷µü´úÆ÷Àà
+    // å‰å‘å£°æ˜è¿­ä»£å™¨ç±»
     class const_iterator;
     class iterator;
 
-    // ºËĞÄ²åÈëÂß¼­
+    // æ ¸å¿ƒæ’å…¥é€»è¾‘
     template<typename Key, typename Val>
     std::pair<iterator, bool> insert_impl(Key&& key, Val&& val) {
         if (auto it = find(key); it != end())
@@ -229,7 +195,7 @@ private:
     }
 
 public:
-    // ÔÚpublic²¿·ÖÖØĞÂÉùÃ÷µü´úÆ÷ÀàĞÍ
+    // åœ¨publicéƒ¨åˆ†é‡æ–°å£°æ˜è¿­ä»£å™¨ç±»å‹
     class const_iterator;
     class iterator;
 
@@ -239,7 +205,7 @@ public:
     using size_type = std::size_t;
     using difference_type = std::ptrdiff_t;
 
-    // ============ µü´úÆ÷ÊµÏÖ ============
+    // ============ è¿­ä»£å™¨å®ç° ============
     class const_iterator {
     private:
         using GridIter = typename GridMap::const_iterator;
@@ -267,7 +233,7 @@ public:
 
         const_iterator() noexcept : parent_(nullptr) {}
 
-        // Ä¬ÈÏ¹¹ÔìµÄµü´úÆ÷Ö¸Ïòend
+        // é»˜è®¤æ„é€ çš„è¿­ä»£å™¨æŒ‡å‘end
         const_iterator(GridIter g, VecIter v, const PointGrid* p) noexcept
             : grid_it_(g), grid_end_(p ? p->grid_.end() : GridIter{}),
             vec_it_(v), parent_(p) {
@@ -301,11 +267,11 @@ public:
         }
 
         bool operator==(const const_iterator& o) const {
-            // °²È«ĞÔ¼ì²é£ºÈç¹ûparent_²»Í¬£¬Ôòµü´úÆ÷±ØÈ»²»ÏàµÈ
+            // å®‰å…¨æ€§æ£€æŸ¥ï¼šå¦‚æœparent_ä¸åŒï¼Œåˆ™è¿­ä»£å™¨å¿…ç„¶ä¸ç›¸ç­‰
             if (parent_ != o.parent_) return false;
-            // Èç¹û¶¼ÊÇnullptr£¬¶¼ÊÇÄ¬ÈÏ¹¹ÔìµÄendµü´úÆ÷
+            // å¦‚æœéƒ½æ˜¯nullptrï¼Œéƒ½æ˜¯é»˜è®¤æ„é€ çš„endè¿­ä»£å™¨
             if (parent_ == nullptr) return true;
-            // ·ñÔò±È½ÏÄÚ²¿µü´úÆ÷
+            // å¦åˆ™æ¯”è¾ƒå†…éƒ¨è¿­ä»£å™¨
             return grid_it_ == o.grid_it_ && vec_it_ == o.vec_it_;
         }
 
@@ -375,11 +341,11 @@ public:
             if (parent_ != o.parent_) return false;
             if (parent_ == nullptr) return true;
 
-            // ¼ò»¯£º±È½Ïgrid_it_£¬Èç¹û¶¼Ö¸Ïòend£¬ÔòÏàµÈ
+            // ç®€åŒ–ï¼šæ¯”è¾ƒgrid_it_ï¼Œå¦‚æœéƒ½æŒ‡å‘endï¼Œåˆ™ç›¸ç­‰
             if (grid_it_ == grid_end_ && o.grid_it_ == o.grid_end_)
                 return true;
 
-            // ·ñÔòĞèÒªÍêÕû±È½Ï
+            // å¦åˆ™éœ€è¦å®Œæ•´æ¯”è¾ƒ
             return grid_it_ == o.grid_it_ && vec_it_ == o.vec_it_;
         }
 
@@ -390,7 +356,7 @@ public:
         }
     };
 
-    // ============ ¹¹Ôì/Îö¹¹ ============
+    // ============ æ„é€ /ææ„ ============
     explicit PointGrid(double eps = 1e-6) { initialize(eps); }
     PointGrid(const PointGrid&) = default;
     PointGrid(PointGrid&&) noexcept = default;
@@ -398,7 +364,7 @@ public:
     PointGrid& operator=(PointGrid&&) noexcept = default;
     ~PointGrid() = default;
 
-    // ============ ÈİÁ¿ ============
+    // ============ å®¹é‡ ============
     bool empty() const noexcept { return total_size_ == 0; }
     size_type size() const noexcept { return total_size_; }
     void clear() noexcept {
@@ -408,7 +374,7 @@ public:
     void reserve(size_type n) { grid_.reserve(n); }
     size_type bucket_count() const noexcept { return grid_.bucket_count(); }
 
-    // ============ ²éÕÒ ============
+    // ============ æŸ¥æ‰¾ ============
     iterator find(const key_type& key) {
         Cell base = Calculator::compute_cell(key, cell_size_inv_);
 
@@ -450,7 +416,7 @@ public:
     bool contains(const key_type& key) const { return find(key) != cend(); }
     size_type count(const key_type& key) const { return contains(key) ? 1 : 0; }
 
-    // ============ ·ÃÎÊ ============
+    // ============ è®¿é—® ============
     const mapped_type& at(const key_type& key) const {
         if (auto it = find(key); it != cend())
             return it->second;
@@ -470,7 +436,7 @@ public:
 
     const mapped_type& operator[](const key_type& key) const { return at(key); }
 
-    // ============ ²åÈë ============
+    // ============ æ’å…¥ ============
     std::pair<iterator, bool> insert(const value_type& val) {
         return insert_impl(val.first, val.second);
     }
@@ -511,7 +477,7 @@ public:
         return emplace(key, std::forward<M>(obj));
     }
 
-    // ============ É¾³ı ============
+    // ============ åˆ é™¤ ============
     size_type erase(const key_type& key) {
         Cell base = Calculator::compute_cell(key, cell_size_inv_);
 
@@ -542,7 +508,7 @@ public:
         auto vec_it = pos.vec_it_;
         auto& vec = cell_it->second;
 
-        // ±£´æÏÂÒ»Î»ÖÃ
+        // ä¿å­˜ä¸‹ä¸€ä½ç½®
         ++vec_it;
         if (vec_it == vec.end()) {
             ++cell_it;
@@ -550,7 +516,7 @@ public:
             vec_it = (cell_it != grid_.end()) ? cell_it->second.begin() : typename StorageVector::iterator{};
         }
 
-        // Ö´ĞĞÉ¾³ı
+        // æ‰§è¡Œåˆ é™¤
         auto next_vec_it = vec.erase(pos.vec_it_);
         --total_size_;
         if (vec.empty()) {
@@ -574,7 +540,7 @@ public:
         return end();
     }
 
-    // ============ µü´úÆ÷ ============
+    // ============ è¿­ä»£å™¨ ============
     iterator begin() {
         auto it = grid_.begin();
         while (it != grid_.end() && it->second.empty()) ++it;
@@ -602,7 +568,7 @@ public:
     const_iterator cbegin() const { return begin(); }
     const_iterator cend() const { return end(); }
 
-    // ============ ĞÅÏ¢²éÑ¯ ============
+    // ============ ä¿¡æ¯æŸ¥è¯¢ ============
     double epsilon() const noexcept { return cell_size_; }
     size_type bucket_size(size_type n) const {
         if (n >= bucket_count())
@@ -614,7 +580,7 @@ public:
     void max_load_factor(float ml) { grid_.max_load_factor(ml); }
     void rehash(size_type n) { grid_.rehash(n); }
 
-    // ============ ½»»» ============
+    // ============ äº¤æ¢ ============
     void swap(PointGrid& other) {
         const double max_eps = std::max(cell_size_, other.cell_size_);
         if (std::abs(cell_size_ - other.cell_size_) > max_eps * 1e-6)
@@ -627,7 +593,7 @@ public:
     }
 };
 
-// ·Ç³ÉÔ±º¯Êı
+// éæˆå‘˜å‡½æ•°
 template<typename T, typename Point>
 void swap(PointGrid<T, Point>& a, PointGrid<T, Point>& b) {
     a.swap(b);

@@ -14,9 +14,11 @@
 
 // 检测点维度
 namespace detail {
+    // 主模板: 默认情况(没有.z成员)
     template<typename T, typename = void>
     struct has_z_member : std::false_type {};
 
+    // 偏特化模板: 当T由.z成员时,成功;否则,退化回主模板
     template<typename T>
     struct has_z_member<T, decltype(std::declval<T&>().z, void())> : std::true_type {};
 
@@ -146,7 +148,7 @@ struct GridCalculator<3> {
 };
 
 // 主模板
-template<typename T, typename Point = DefaultPoint3D<double>>
+template<typename T, typename Point>
 class PointGrid {
 private:
     static constexpr size_t DIM = detail::point_dimension_v<Point>;
@@ -272,7 +274,9 @@ public:
             // 如果都是nullptr，都是默认构造的end迭代器
             if (parent_ == nullptr) return true;
             // 否则比较内部迭代器
-            return grid_it_ == o.grid_it_ && vec_it_ == o.vec_it_;
+            if (grid_it_ != o.grid_it_) return false;
+            if (grid_it_ == grid_end_) return true;
+            return vec_it_ == o.vec_it_;
         }
 
         bool operator!=(const const_iterator& o) const { return !(*this == o); }
@@ -338,15 +342,14 @@ public:
         }
 
         bool operator==(const iterator& o) const {
+            // 安全性检查：如果parent_不同，则迭代器必然不相等
             if (parent_ != o.parent_) return false;
+            // 如果都是nullptr，都是默认构造的end迭代器
             if (parent_ == nullptr) return true;
-
-            // 简化：比较grid_it_，如果都指向end，则相等
-            if (grid_it_ == grid_end_ && o.grid_it_ == o.grid_end_)
-                return true;
-
-            // 否则需要完整比较
-            return grid_it_ == o.grid_it_ && vec_it_ == o.vec_it_;
+            // 否则比较内部迭代器
+            if (grid_it_ != o.grid_it_) return false;
+            if (grid_it_ == grid_end_) return true;
+            return vec_it_ == o.vec_it_;
         }
 
         bool operator!=(const iterator& o) const { return !(*this == o); }
@@ -386,7 +389,7 @@ public:
             if (cell_it != grid_.end()) {
                 for (auto vec_it = cell_it->second.begin(); vec_it != cell_it->second.end(); ++vec_it) {
                     if (Calculator::distance_sq(vec_it->first, key) < eps_sq_) {
-                        return iterator(cell_it, vec_it, this);
+                        return iterator(cell_it, vec_it, this); // 返回找到的第一个元素
                     }
                 }
             }
@@ -438,17 +441,17 @@ public:
 
     // ============ 插入 ============
     std::pair<iterator, bool> insert(const value_type& val) {
-        return insert_impl(val.first, val.second);
+        return (val.first, val.second);
     }
 
     std::pair<iterator, bool> insert(value_type&& val) {
-        return insert_impl(val.first, std::move(val.second));
+        return (val.first, std::move(val.second));
     }
 
     template<typename P,
         std::enable_if_t<std::is_constructible_v<value_type, P&&>, int> = 0>
     std::pair<iterator, bool> insert(P&& val) {
-        return insert_impl(
+        return (
             static_cast<const key_type&>(std::forward<P>(val).first),
             std::forward<P>(val).second
         );
@@ -501,31 +504,27 @@ public:
         return 0;
     }
 
-    iterator erase(iterator pos) {
+     iterator erase(iterator pos) {
         if (pos == end()) return end();
-
+    
         auto cell_it = pos.grid_it_;
-        auto vec_it = pos.vec_it_;
         auto& vec = cell_it->second;
-
-        // 保存下一位置
-        ++vec_it;
-        if (vec_it == vec.end()) {
-            ++cell_it;
-            while (cell_it != grid_.end() && cell_it->second.empty()) ++cell_it;
-            vec_it = (cell_it != grid_.end()) ? cell_it->second.begin() : typename StorageVector::iterator{};
-        }
-
-        // 执行删除
+    
+        // erase 返回下一个有效 vec iterator
         auto next_vec_it = vec.erase(pos.vec_it_);
         --total_size_;
+    
         if (vec.empty()) {
+            // 整个 cell 为空，从 grid_ 中移除
             auto next_cell_it = grid_.erase(cell_it);
-            return iterator(next_cell_it,
-                (next_cell_it != grid_.end()) ? next_cell_it->second.begin() : typename StorageVector::iterator{},
-                this);
-        }
-        else {
+            // 构造指向下一个非空 cell 的 begin（如果存在）
+            if (next_cell_it != grid_.end()) {
+                return iterator(next_cell_it, next_cell_it->second.begin(), this);
+            } else {
+                return end();
+            }
+        } else {
+            // 同一个 cell 内还有元素
             return iterator(cell_it, next_vec_it, this);
         }
     }

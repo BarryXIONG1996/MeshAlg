@@ -441,17 +441,17 @@ public:
 
     // ============ 插入 ============
     std::pair<iterator, bool> insert(const value_type& val) {
-        return (val.first, val.second);
+        return insert_impl(val.first, val.second);
     }
 
     std::pair<iterator, bool> insert(value_type&& val) {
-        return (val.first, std::move(val.second));
+        return insert_impl(val.first, std::move(val.second));
     }
 
     template<typename P,
         std::enable_if_t<std::is_constructible_v<value_type, P&&>, int> = 0>
     std::pair<iterator, bool> insert(P&& val) {
-        return (
+        return insert_impl(
             static_cast<const key_type&>(std::forward<P>(val).first),
             std::forward<P>(val).second
         );

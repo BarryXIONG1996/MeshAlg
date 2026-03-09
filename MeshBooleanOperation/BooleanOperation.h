@@ -10,7 +10,7 @@ public:
     BooleanOperation(
         TopoTriMesh* operandA,   // 目标集
         TopoTriMesh* operandB,   // 工具集 
-        BooleanType op                 // 布尔操作类型：UNION / INTERSECTION / DIFFERENCE
+        BooleanType op           // 布尔操作类型：UNION / INTERSECTION / DIFFERENCE
     );
 
     bool Execute(TopoTriMesh& res);    // 执行布尔运算，返回结果集

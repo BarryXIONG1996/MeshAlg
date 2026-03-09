@@ -1,6 +1,7 @@
 #include "TopoTriMesh.h"
 #include <GeomCalc.h>
 #include <algorithm>
+#include <assert.h>
 
 BndBox3d TopoTriMesh::GetBndBox() {
     BndBox3d bbox;
@@ -24,8 +25,7 @@ Face* TopoTriMesh::AddFace2TopoTriMesh(std::vector<Vec3d> const& pnts)
         auto it = p2V.find(pnts[i]);
         if (it != p2V.end()) {
             vertices[i] = it->second;
-        }
-        else {
+        } else {
             Vertex* newV = new Vertex{ pnts[i], {}, 0 };
             vs.push_back(newV);
             p2V[pnts[i]] = newV;
@@ -77,8 +77,7 @@ Face* TopoTriMesh::AddFace2TopoTriMesh(std::vector<Vec3d> const& pnts)
             newF->es[i]->lF = newF;
             newF->es[i]->lPE = newF->es[prev];
             newF->es[i]->lSE = newF->es[next];
-        }
-        else {
+        } else {
             newF->es[i]->rF = newF;
             newF->es[i]->rPE = newF->es[prev];
             newF->es[i]->rSE = newF->es[next];
@@ -122,6 +121,7 @@ void TopoTriMesh::RemoveEdge(Edge* e)
         // 清理其他相邻边中指向 e 的拓扑指针
         for (Edge* adj : adjEs) {
             if (adj == e) continue; // 跳过自身
+            assert(adj);
             if (adj->lPE == e) adj->lPE = nullptr;
             if (adj->lSE == e) adj->lSE = nullptr;
             if (adj->rPE == e) adj->rPE = nullptr;
